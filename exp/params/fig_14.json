@@ -1,0 +1,13 @@
+{
+    "methods": ["CHIME", "Sherman", "ROLEX", "SMART"],
+    "workload_names": ["40M", "60M", "80M", "100M", "120M"],
+    "client_num": [10, 64],
+    "MN_num": 1,
+    "key_size": "randint",
+    "value_size": 8,
+    "cache_size": 60000,
+    "span_size": {"CHIME": 64, "SMART": 1, "Sherman": 64, "ROLEX": 16},
+    "epsilon": 16,
+    "neighbor_size": 8,
+    "hotspot_buffer_size": 30
+}

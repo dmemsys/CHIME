@@ -1,0 +1,9 @@
+{
+    "methods": ["Neighborhood"],
+    "target_epoch": 10,
+    "client_num": [10, 64],
+    "MN_num": 1,
+    "neighbor_size": [1, 4, 8],
+    "key_size": [8, 16, 24, 32, 40, 48, 56, 64],
+    "value_size": 8
+}

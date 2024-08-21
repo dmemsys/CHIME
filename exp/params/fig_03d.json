@@ -1,0 +1,5 @@
+{
+    "methods": ["Hopscotch", "FaRM", "Associativity", "RACE"],
+    "table_size": 128,
+    "ampl_size": [4, 8, 12, 16, 20]
+}

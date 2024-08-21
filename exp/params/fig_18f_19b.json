@@ -1,0 +1,13 @@
+{
+    "methods": ["CHIME"],
+    "workload_names": ["YCSB C", "c"],
+    "target_epoch": 9,
+    "client_num": [10, 64],
+    "MN_num": 1,
+    "key_size": "randint",
+    "value_size": 8,
+    "cache_size": 10000,
+    "span_size": 64,
+    "neighbor_size": [2, 4, 6, 8, 10, 12, 14, 16],
+    "hotspot_buffer_size": 30
+}
