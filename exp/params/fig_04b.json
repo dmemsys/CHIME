@@ -1,0 +1,10 @@
+{
+    "methods": ["Segment", "Segment and Metadata (2-I/O)"],
+    "target_epoch": 8,
+    "client_num": [10, 64],
+    "MN_num": 1,
+    "key_size": [8, 16, 24, 32, 40, 48, 56, 64],
+    "value_size": 8,
+    "span_size": 64,
+    "segment_size": 8
+}

@@ -1,0 +1,16 @@
+{
+    "methods": ["SMART", "Sherman", "ROLEX"],
+    "workload_names": ["YCSB C", "c"],
+    "client_num": [10, 64],
+    "MN_num": 1,
+    "key_size": "randint",
+    "value_size": 8,
+    "cache_size": 60000,
+    "neighbor_size": 8,
+    "hotspot_buffer_size": 30,
+    "ampl_size": {
+        "SMART": [1],
+        "Sherman": [2, 8, 16, 32, 64, 96, 128],
+        "ROLEX": [12, 16, 32, 64, 96, 128]
+    }
+}

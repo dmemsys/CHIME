@@ -1,0 +1,13 @@
+{
+    "methods": ["SMART", "CHIME w/ Speculative Leaf Read", "CHIME w/o Speculative Leaf Read"],
+    "workload_names": ["YCSB C", "c"],
+    "target_epoch": 10,
+    "client_num": [[10, 8], [10, 16], [10, 24], [10, 32], [10, 40], [10, 48], [10, 56], [10, 64]],
+    "MN_num": 1,
+    "key_size": "randint",
+    "value_size": 8,
+    "cache_size": 100000,
+    "span_size": 64,
+    "neighbor_size": 8,
+    "hotspot_buffer_size": 30
+}

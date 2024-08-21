@@ -1,0 +1,6 @@
+{
+    "methods": ["CHIME w/ Sibling-Based Validation", "CHIME w/o Sibling-Based Validation", "SMART", "Sherman", "ROLEX"],
+    "key_size": [8, 32, 64, 96, 128, 160, 192, 224, 256],
+    "value_size": 8,
+    "span_size": 64
+}

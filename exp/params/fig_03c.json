@@ -1,0 +1,14 @@
+{
+    "methods": ["SMART", "Sherman", "ROLEX"],
+    "workload_names": ["YCSB C", "c"],
+    "target_epoch": 9,
+    "client_num": [[10, 8], [10, 16], [10, 24], [10, 32], [10, 40], [10, 48]],
+    "MN_num": 10,
+    "key_size": "randint",
+    "value_size": 8,
+    "cache_size": 100,
+    "span_size": {"CHIME": 64, "SMART": 1, "Sherman": 64, "ROLEX": 16},
+    "epsilon": 16,
+    "neighbor_size": 8,
+    "hotspot_buffer_size": 30
+}

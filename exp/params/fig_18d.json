@@ -1,0 +1,14 @@
+{
+    "methods": ["CHIME-indirect", "SMART-RCU", "Marlin", "ROLEX-indirect"],
+    "workload_names": ["YCSB C", "c"],
+    "target_epoch": 9,
+    "client_num": [10, 64],
+    "MN_num": 1,
+    "key_size": "randint",
+    "value_size": [8, 16, 32, 64, 128, 256, 384, 512],
+    "cache_size": 100,
+    "span_size": {"CHIME-indirect": 64, "SMART-RCU": 1, "Marlin": 64, "ROLEX-indirect": 16},
+    "epsilon": 16,
+    "neighbor_size": 8,
+    "hotspot_buffer_size": 30
+}
