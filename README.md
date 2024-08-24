@@ -7,6 +7,9 @@ This artifact provides the source code of **CHIME** and scripts to reproduce all
 
 **This README is specifically written for the artifact evaluation (AE).**
 
+> [!IMPORTANT]  
+> **📢 [Aug. 24] The cluster for the first period has been created and ready for you to use now !!!**  
+
 - [CHIME](#chime-a-cache-efficient-and-high-performance-hybrid-index-on-disaggregated-memory)
   * [Supported Platform](#supported-platform)
   * [Create Cluster](#create-cluster)
@@ -24,7 +27,8 @@ We haven't done any test in other hardware environment.
 
 > [!IMPORTANT]  
 > **📢 We have reserved 10 r650 nodes on CloudLab for two periods: *August 23rd - September 1st* and *September 9th - September 18th* (EDT).**  
-> **📢 Since we only provide one physical cluster for all AE reviewers, please coordinate with each other to use the cluster one person at a time.**
+> **📢 Since we only provide one physical cluster for all AE reviewers, please coordinate with each other to use the cluster one person at a time.**  
+> **📢 According to the latest announcement on CloudLab, the Clemson cluster will be unavailable in Aug 29th from 8 am to noon (EDT). Thus, please do not use the cluster during this time.**
 
 * You can simply use the ***temporary account*** to use our reserved r650 nodes on CloudLab. **(Recommended!!)**
   * We have provided the temporary account on the artifact submission site.
