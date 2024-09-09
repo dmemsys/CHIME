@@ -7,8 +7,9 @@ This artifact provides the source code of **CHIME** and scripts to reproduce all
 
 **This README is specifically written for the artifact evaluation (AE).**
 
-> [!IMPORTANT]  
-> **📢 [Aug. 24] The cluster for the first period has been created and ready for you to use now !!!**  
+> [!IMPORTANT]
+> **📢 [Sept. 9] The cluster for the second period has been created and ready for you to use now !!!**  
+> **📢 ~[Aug. 24] The cluster for the first period has been created and ready for you to use now !!!~**
 
 - [CHIME](#chime-a-cache-efficient-and-high-performance-hybrid-index-on-disaggregated-memory)
   * [Supported Platform](#supported-platform)
