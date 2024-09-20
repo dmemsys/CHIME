@@ -1,0 +1,15 @@
+{
+    "y_label": "Cache Consumption (MB)",
+    "x_label": "Amplification Factor",
+
+    "yscale": "log",
+
+    "legend_location": "best",
+    "figsize": [5, 4],
+
+    "method_legend": {
+        "SMART": "SMART",
+        "Sherman": "Sherman",
+        "ROLEX": "ROLEX"
+    }
+}

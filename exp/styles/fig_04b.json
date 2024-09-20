@@ -1,0 +1,12 @@
+{
+    "y_label": "Throughput (Mops/s)",
+    "x_label": "Key Size (Bytes)",
+
+    "legend_location": "best",
+    "figsize": [5, 4],
+
+    "method_legend": {
+        "Segment": "Ideal",
+        "Segment and Metadata (2-I/O)": "Leaf Meta."
+    }
+}

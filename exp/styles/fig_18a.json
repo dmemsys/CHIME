@@ -1,0 +1,9 @@
+{
+    "y_label": "Throughput (Mops/s)",
+    "x_label": "Zipfian coefficient",
+
+    "legend_location": "upper right",
+    "figsize": [5, 4],
+
+    "method_legend": {"CHIME": "CHIME", "Sherman": "Sherman", "ROLEX": "ROLEX", "SMART": "SMART"}
+}

@@ -1,0 +1,22 @@
+{
+    "y_label": "Throughput (Mops/s)",
+    "yR_label": "Latency (us)",
+
+    "y_lim": [0, 100],
+    "yR_scale": "log",
+    "bar_offset": 2.5,
+
+    "legend_location": "upper left",
+    "legendR_location": "upper right",
+
+    "figsize": [10, 6],
+
+    "method_legend": {
+        "Baseline (Sherman)": "Sherman",
+        "+Hopscotch Leaf Node": "+Hopscotch leaf node",
+        "+Vacancy-Aware Lock": "+Vacancy bitmap piggybacking",
+        "+Metadata Replication": "+Leaf metadata replication",
+        "+Sibling-Based Validation": "+Sibling-based validation",
+        "+Speculative Leaf Read (CHIME)": "+Speculative read (CHIME)"
+    }
+}

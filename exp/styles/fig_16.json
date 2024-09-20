@@ -1,0 +1,15 @@
+{
+    "y_label": "Meta. Size (Bytes/KV) ",
+    "x_label": "Key Size (Bytes)",
+
+    "legend_location": "upper left",
+    "figsize": [5, 4],
+
+    "method_legend": {
+        "CHIME w/ Sibling-Based Validation": "CHIME w/ SV",
+        "CHIME w/o Sibling-Based Validation": "CHIME w/o SV",
+        "SMART"  : "SMART",
+        "Sherman": "Sherman",
+        "ROLEX"  : "ROLEX"
+    }
+}
