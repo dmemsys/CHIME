@@ -4,7 +4,6 @@
 from func_timeout import FunctionTimedOut
 from pathlib import Path
 import json
-import time
 
 from utils.cmd_manager import CMDManager
 from utils.log_parser import LogParser
