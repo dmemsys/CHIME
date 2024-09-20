@@ -1,0 +1,7 @@
+{
+    "y_label": "Max. Load Factor (%)",
+    "x_label": "Amplification Factor",
+
+    "legend_location": "best",
+    "figsize": [5, 4]
+}

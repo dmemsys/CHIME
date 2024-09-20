@@ -1,0 +1,14 @@
+{
+    "y_label": "Throughput (Mops/s)",
+    "x_label": "Value Size (Bytes)",
+
+    "legend_location": "upper right",
+    "figsize": [5, 4],
+
+    "method_legend": {
+        "CHIME-indirect": "CHIME-Indirect",
+        "SMART-RCU": "SMART-RCU",
+        "Marlin": "Marlin",
+        "ROLEX-indirect": "ROLEX-Indirect"
+    }
+}

@@ -1,0 +1,9 @@
+{
+    "yL_label": "Cache Consumed (MB)",
+    "yR_label": "Max. Load Factor (%)",
+    "x_label": "Neighbor. Size (Entries)",
+
+    "legendL_anchor": [0.3, 0.8],
+    "legendR_anchor": [0.3, 0.6],
+    "figsize": [5, 4]
+}

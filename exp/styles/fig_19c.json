@@ -1,0 +1,9 @@
+{
+    "yL_label": "Throughput (Mops/s)",
+    "yR_label": "Buffer Hit Ratio (%)",
+    "x_label": "Hotspot Buffer Size (MB)",
+
+    "legendL_anchor": [0.3, 0.5],
+    "legendR_anchor": [0.3, 0.3],
+    "figsize": [5, 4]
+}

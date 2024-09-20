@@ -1,0 +1,13 @@
+{
+    "y_label": "Throughput (Mops/s)",
+    "x_label": "Key Size (Bytes)",
+
+    "legend_location": "lower right",
+    "figsize": [5, 4],
+
+    "method_legend": {
+        "Neighborhood (1-entry)": "1 Entry",
+        "Neighborhood (4-entry)": "4 Entries",
+        "Neighborhood (8-entry)": "8 Entries"
+    }
+}

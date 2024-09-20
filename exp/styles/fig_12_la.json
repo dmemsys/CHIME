@@ -1,0 +1,10 @@
+{
+    "y_label": "P99 Latency (x10 us)",
+    "x_label": "Throughput (Mops/s)      ",
+    "y_multiple": 10,
+
+    "legend_location": "upper right",
+    "figsize": [5, 4],
+
+    "method_legend": {"CHIME": "CHIME"}
+}

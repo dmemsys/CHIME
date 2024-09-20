@@ -1,0 +1,9 @@
+{
+    "y_label": "Throughput (Mops/s)",
+    "x_label": "Value Size (Bytes)",
+
+    "legend_location": "upper right",
+    "figsize": [5, 4],
+
+    "method_legend": {"CHIME": "CHIME", "Sherman": "Sherman", "ROLEX": "ROLEX", "SMART": "SMART"}
+}

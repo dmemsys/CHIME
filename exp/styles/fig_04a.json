@@ -1,0 +1,12 @@
+{
+    "y_label": "Throughput (Mops/s)",
+    "x_label": "Hop Range Size (Entries)      ",
+
+    "legend_location": "upper right",
+    "figsize": [5, 4],
+
+    "method_legend": {
+        "Segment": "Ideal",
+        "Metadata before Segment": "Vacancy."
+    }
+}

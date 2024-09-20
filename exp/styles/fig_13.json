@@ -1,0 +1,15 @@
+{
+    "y_label": "Throughput (Mops/s)",
+    "yR_label": "Latency (us)",
+
+    "legend_location": "best",
+    "legendR_location": "upper right",
+
+    "figsize": [10, 6],
+
+    "ignore_point": {
+        "bar_group": "YCSB LOAD",
+        "method": "ROLEX-indirect"
+    },
+    "method_legend": {"CHIME-indirect": "CHIME-Indirect", "Marlin": "Marlin", "ROLEX-indirect": "ROLEX-Indirect", "SMART-RCU": "SMART-RCU"}
+}

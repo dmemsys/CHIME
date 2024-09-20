@@ -1,0 +1,14 @@
+{
+    "y_label": "Throughput (Mops/s)",
+    "x_label": "Number of Clients",
+
+    "legend_location": "lower right",
+    "figsize": [5, 4],
+
+    "method_legend": {
+        "SMART": "SMART-Opt",
+        "CHIME w/ Speculative Leaf Read": "CHIME w/ SR",
+        "CHIME w/o Speculative Leaf Read": "CHIME w/o SR"
+    },
+    "dotted_methods": ["SMART"]
+}
