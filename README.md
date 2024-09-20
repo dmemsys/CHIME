@@ -1,15 +1,10 @@
 # CHIME: A Cache-Efficient and High-Performance Hybrid Index on Disaggregated Memory
 
 
-This is the implementation repository of our accepted *SOSP'24* paper: **CHIME: A Cache-Efficient and High-Performance Hybrid Index on Disaggregated Memory**.
+This is the implementation repository of our *SOSP'24* paper: **CHIME: A Cache-Efficient and High-Performance Hybrid Index on Disaggregated Memory**.
 This artifact provides the source code of **CHIME** and scripts to reproduce all the experiment results in our paper.
 **CHIME**, a <u>**C**</u>ache-efficient and <u>**H**</u>igh-performance Hybrid <u>**I**</u>ndex on disaggregated <u>**ME**</u>mory, combines the B+ tree with hopscotch hashing, to break the trade-off between cache consumption and read amplifications for existing DM range indexes.
 
-**This README is specifically written for the artifact evaluation (AE).**
-
-> [!IMPORTANT]
-> **📢 [Sept. 9] The cluster for the second period has been created and ready for you to use now !!!**  
-> **📢 ~[Aug. 24] The cluster for the first period has been created and ready for you to use now !!!~**
 
 - [CHIME](#chime-a-cache-efficient-and-high-performance-hybrid-index-on-disaggregated-memory)
   * [Supported Platform](#supported-platform)
@@ -26,27 +21,11 @@ This artifact provides the source code of **CHIME** and scripts to reproduce all
 We strongly recommend you to run CHIME using the r650 instances on [CloudLab](https://www.cloudlab.us/) as the code has been thoroughly tested there.
 We haven't done any test in other hardware environment.
 
-> [!IMPORTANT]  
-> **📢 We have reserved 10 r650 nodes on CloudLab for two periods: *August 23rd - September 1st* and *September 9th - September 18th* (EDT).**  
-> **📢 Since we only provide one physical cluster for all AE reviewers, please coordinate with each other to use the cluster one person at a time.**  
-> **📢 According to the latest announcement on CloudLab, the Clemson cluster will be unavailable in Aug 29th from 8 am to noon (EDT). Thus, please do not use the cluster during this time.**
-
-* You can simply use the ***temporary account*** to use our reserved r650 nodes on CloudLab. **(Recommended!!)**
-  * We have provided the temporary account on the artifact submission site.
-  * Log into the temporary account on CloudLab, then please submit the SSH public key of your laptop/PC via `TempUser`|-->`Manage SSH keys`.
-  * We have created a cluster and setup all the required environments for you in advance. You will see an experiment named `CHIME-AE` after that from `Experiments`|-->`My Experiments`. 
-  * Reboot all nodes in the cluster to have your submitted public key loaded via `CHIME-AE`|-->`List View`|-->`Reboot Selected` (This takes about 5 minutes).
-  * Then you can log into all the 10 r650 nodes with the `SSH command` in `List View`. If you find some nodes have broken shells (where only a '$' sign is shown when you log in), you should reboot them again. This is an internal issue of CloudLab, which happens sometimes.
-
-* Otherwise, if you want to conduct AE with your own CloudLab account, you will need to reserve these nodes in advance since r650 nodes are rarely available.
-
+If you want to reproduce the results in the paper, 10 r650 machines are needed; otherwise, fewer machines (i.e., 3) is OK. Each r650 machine has two 36-core Intel Xeon CPUs, 256 GB of DRAM, and one 100 Gbps Mellanox ConnectX-6 RNIC. Each RNIC is connected to a 100 Gbps Ethernet switch.
 
 ## Create Cluster
 
-> [!NOTE]  
-> **📢 Just skip this section if you are using our created cluster (with the temporary account).**
-
-Otherwise, follow the steps below to create an experimental cluster with 10 r650 nodes on CloudLab:
+Follow the steps below to create an experimental cluster with 10 r650 nodes on CloudLab:
 
 1) Log into your own account.
 
@@ -67,10 +46,7 @@ git clone https://github.com/dmemsys/CHIME.git
 
 ## Environment Setup
 
-> [!NOTE]  
-> **📢 Just skip this section if you are using our created cluster, where we setup the environment in advance.**
-
-Otherwise, you have to install the necessary dependencies in order to build CHIME.
+You have to install the necessary dependencies in order to build CHIME.
 Note that you should run the following steps on **all** nodes you have created.
 
 1) Set bash as the default shell. And enter the CHIME directory.

@@ -9,18 +9,7 @@ The name of each script corresponds to the number of each figure in our paper.
 
 ## Full YCSB workloads
 
-In our paper, we use YCSB workloads, most of which includes 60 million entries and operations. You should generate full YCSB workloads on **all** nodes.
-
-> [!NOTE]  
-> **📢 If you are using our created cluster, you can just copy our generated workloads to save time, using the following commands:**
-```shell
-sudo su
-cd CHIME/ycsb
-rm -rf workloads
-# This takes about 0.5 minutes
-cp -r /users/xuchuan/workloads workloads
-```
-Otherwise, if you want to generate the workloads by yourself, using the following commands:
+In our paper, we use YCSB workloads, most of which includes 60 million entries and operations. You should generate full YCSB workloads on **all** nodes, using the following commands:
 ```shell
 sudo su
 cd CHIME/ycsb
@@ -52,16 +41,12 @@ git clone https://github.com/River861/ROLEX
 
 
 ## Additional Setup
-
-> [!NOTE]  
-> **📢 Just skip this section if you are using our created cluster, where the default setup is feasible.**
-
-* Change the `home_dir` value in `./params/common.json` to your actual home directory path (*e.g.*, /users/TempUser).
+* Change the `home_dir` value in `./params/common.json` to your actual home directory path (*e.g.*, /users/XXX).
     ```json
     "home_dir" : "/your/home/directory"
     ```
 
-* Change the `workloads_dir` value in `./params/common.json` to the actual path of the generated YCSB workloads (*e.g.*, /users/TempUser/CHIME/ycsb/workloads).
+* Change the `workloads_dir` value in `./params/common.json` to the actual path of the generated YCSB workloads (*e.g.*, /users/XXX/CHIME/ycsb/workloads).
     ```json
     "workloads_dir" : "/path/to/workloads"
     ```
@@ -76,7 +61,6 @@ git clone https://github.com/River861/ROLEX
 
 > [!important]  
 > **📢 All the scripts only need to be run on the **master** node.**  
-> **(If you are using our created cluster, the master node is the node with the IP "10.10.1.2" and the host name "node-0")**
 
 * You can run all the scripts with a single batch script using the following command:
     ```shell
@@ -135,10 +119,8 @@ git clone https://github.com/River861/ROLEX
     python3 fig_19c.py
     ```
 
-* The json results and PDF figures of each scirpt will be stored inside a new directoty `./results`.
+* The json results and PDF figures of each scirpt will be stored inside a new directory `./results`.
 
     The results you get may not be exactly the same as the ones shown in the paper due to changes of physical machines.
     And some curves may fluctuate due to the instability of RNICs in the cluster.
     However, all results here support the conclusions we made in the paper.
-
-    Please save the results and figures to your own laptop/PC after running all experiments in case other AE reviewers execute the scripts and overwrite your results.
