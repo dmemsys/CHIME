@@ -14,7 +14,8 @@ This artifact provides the source code of **CHIME** and scripts to reproduce all
   * [YCSB Workloads](#ycsb-workloads)
   * [Getting Started *(Artifacts Functional)*](#getting-started-artifacts-functional)
   * [Reproduce All Experiment Results *(Results Reproduced)*](#reproduce-all-experiment-results-results-reproduced)
-  <!-- * [Paper](#paper) -->
+  * [Paper](#paper)
+  * [Acknowledgments](#acknowledgments)
 
 
 ## Supported Platform
@@ -163,3 +164,23 @@ You should run the following steps on **all** nodes.
 
 ## Reproduce All Experiment Results *(Results Reproduced)*
 We provide code and scripts in `./exp` folder for reproducing our experiments. For more details, see [./exp/README.md](./exp#reproduce-all-experiment-results).
+
+
+## Paper
+If you use CHIME in your research, please cite our paper:
+```bibtex
+@inproceedings{chime2024,
+  author    = {Xuchuan Luo and Jiacheng Shen and Pengfei Zuo and Xin Wang and Michael R. Lyu and Yangfan Zhou},
+  title     = {{CHIME}: A Cache-Efficient and High-Performance Hybrid Index on Disaggregated Memory},
+  booktitle = {Proceedings of the 30th Symposium on Operating Systems Principles ({SOSP} 2024)},
+  year      = {2024},
+  address   = {Austin, TX},
+  pages     = {110--126},
+  url       = {https://doi.org/10.1145/3694715.3695959},
+  publisher = {{ACM}},
+  month     = nov,
+}
+```
+
+## Acknowledgments
+This repository adopts [Sherman](https://github.com/thustorage/Sherman)'s codebase and [SMART](https://github.com/dmemsys/SMART)'s RDWC technique. We really appreciate it.
