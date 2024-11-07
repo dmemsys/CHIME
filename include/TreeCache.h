@@ -139,6 +139,8 @@ inline bool TreeCache::add_to_cache(InternalNode *page) {
           if (v < 0) {
             evict();
           }
+        } else {
+          safely_delete(ptr);
         }
         return true;
       }
