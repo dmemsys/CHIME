@@ -41,35 +41,61 @@ private:
 public:
   VALOCK(uint64_t vacancy_bitmap, uint64_t max_key_idx) : vacancy_bitmap(vacancy_bitmap), max_key_idx(max_key_idx), lock_bit(0) {}
 
-  void update_vacancy(int l, int r, const std::vector<int>& empty_idxes, bool is_leaf=true) {  // [l, r]
-    int span_size = is_leaf ? define::leafSpanSize : define::internalSpanSize;
-    int l_bit = find_bucket(l, span_size), r_bit = find_bucket(r, span_size);
+  void update_vacancy(int l, int r, const int* empty_idxes, int empty_cnt, bool is_leaf=true) {  // [l, r]
+    const int span_size = is_leaf ? (int)define::leafSpanSize : (int)define::internalSpanSize;
+    const int l_bit = find_bucket(l, span_size), r_bit = find_bucket(r, span_size);
+    constexpr uint64_t kValidMask = (1ULL << define::vacancyMapBit) - 1ULL;
 
-    if (l_bit <= r_bit) for (int i = l_bit; i <= r_bit; ++ i) vacancy_bitmap |= (1ULL << i);
-    else {
-      for (int i = 0; i <= r_bit; ++ i) vacancy_bitmap |= (1ULL << i);
-      for (int i = l_bit; i < (int)define::vacancyMapBit; ++ i) vacancy_bitmap |= (1ULL << i);
+    uint64_t vb = vacancy_bitmap;
+    if (l_bit <= r_bit) {
+      const uint64_t hi = (r_bit + 1 >= 64) ? ~0ULL : ((1ULL << (r_bit + 1)) - 1ULL);
+      vb |= (hi & ~((1ULL << l_bit) - 1ULL)) & kValidMask;
+    } else {
+      const uint64_t lo = ((1ULL << (r_bit + 1)) - 1ULL);
+      const uint64_t hi = ~((1ULL << l_bit) - 1ULL) & kValidMask;
+      vb |= (lo | hi);
     }
-    for (int empty_idx : empty_idxes) {
+    for (int k = 0; k < empty_cnt; ++ k) {
+      int empty_idx = empty_idxes[k];
       int i = find_bucket(empty_idx, span_size);
       if (l_bit <= r_bit) assert(i >= l_bit && i <= r_bit);
       else assert((i >= 0 && i <= r_bit) || (i >= l_bit && i < (int)define::vacancyMapBit));
-      vacancy_bitmap &= ~(1ULL << i);
+      vb &= ~(1ULL << i);
     }
+    vacancy_bitmap = vb;
+  }
+
+  void update_vacancy(int l, int r, const std::vector<int>& empty_idxes, bool is_leaf=true) {  // [l, r]
+    update_vacancy(l, r, empty_idxes.data(), (int)empty_idxes.size(), is_leaf);
   }
 
   int get_read_entry_num_from_bitmap(int start_idx, bool is_leaf) {
-    int span_size = is_leaf ? define::leafSpanSize : define::internalSpanSize;
-    int s_bit = find_bucket(start_idx, span_size);
-
-    for (int i = 0; i < (int)define::vacancyMapBit; ++ i) {
-      int e_bit = (s_bit + i) % define::vacancyMapBit;
-      if (!(vacancy_bitmap & (1ULL << e_bit))) {  // empty
-        auto [l_idx, r_idx] = get_idx_range_in_bucket(e_bit, span_size);  // [l_idx, r_idx]
-        if (start_idx > l_idx) continue;  // !!Important
+    constexpr uint64_t kValidMask = (1ULL << define::vacancyMapBit) - 1ULL;
+    const int span_size = is_leaf ? (int)define::leafSpanSize : (int)define::internalSpanSize;
+    const uint64_t free_bits = (~(uint64_t)vacancy_bitmap) & kValidMask;
+    if (free_bits == 0ULL) {
+      return span_size;
+    }
+    const int s_bit = find_bucket(start_idx, span_size);
+    uint64_t hi = free_bits >> s_bit;
+    while (hi != 0ULL) {
+      const int e_bit = s_bit + __builtin_ctzll(hi);
+      auto [l_idx, r_idx] = get_idx_range_in_bucket(e_bit, span_size);
+      if (start_idx <= l_idx) {
         int entry_num = (r_idx + span_size - start_idx + 1) % span_size;
         return entry_num ? entry_num : span_size;
       }
+      hi &= (hi - 1ULL);
+    }
+    uint64_t lo = free_bits & ((1ULL << s_bit) - 1ULL);
+    while (lo != 0ULL) {
+      const int e_bit = __builtin_ctzll(lo);
+      auto [l_idx, r_idx] = get_idx_range_in_bucket(e_bit, span_size);
+      if (start_idx <= l_idx) {
+        int entry_num = (r_idx + span_size - start_idx + 1) % span_size;
+        return entry_num ? entry_num : span_size;
+      }
+      lo &= (lo - 1ULL);
     }
     return span_size;
   }
@@ -83,24 +109,20 @@ public:
   }
 
 private:
-  int find_bucket(int kv_idx, int span_size) {  // 0~span_size => 0~bitmap_size
-    double avg_per_bucket = static_cast<double>(span_size) / define::vacancyMapBit;
-    int bucket = static_cast<int>(floor(kv_idx / avg_per_bucket));
-    return bucket % define::vacancyMapBit;
+  int find_bucket(int kv_idx, int span_size) const {  // 0~span_size => 0~bitmap_size
+    if (span_size == 64 && (uint32_t)kv_idx < 64u) {
+      return (int)(((uint32_t)kv_idx * define::vacancyMapBit) >> 6);
+    }
+    return (int)((((uint32_t)kv_idx * define::vacancyMapBit) / (uint32_t)span_size) % define::vacancyMapBit);
   }
 
-  std::pair<int, int> get_idx_range_in_bucket(int bucket, int span_size) {  // 0~bitmap_size => 0~span_size
-    auto get_first = [=](int bucket_id){
-      double avg_per_bucket = static_cast<double>(span_size) / define::vacancyMapBit;
-      int idx = bucket_id ? static_cast<int>(floor(bucket_id * avg_per_bucket)) : 0;
-      if (span_size * bucket_id % define::vacancyMapBit != 0) {
-        idx ++;
-      }
-      return idx;
-    };
+  static int bucket_first_idx(int bucket_id, int span_size) {
+    return (int)(((uint32_t)bucket_id * (uint32_t)span_size + define::vacancyMapBit - 1u) / define::vacancyMapBit);
+  }
 
-    int l_idx = get_first(bucket);
-    int r_idx = get_first(bucket + 1) - 1;
+  std::pair<int, int> get_idx_range_in_bucket(int bucket, int span_size) const {  // 0~bitmap_size => 0~span_size
+    int l_idx = bucket_first_idx(bucket, span_size);
+    int r_idx = bucket_first_idx(bucket + 1, span_size) - 1;
     if (r_idx >= span_size) r_idx = span_size - 1;
     return std::make_pair(l_idx, r_idx);
   }
@@ -179,7 +201,10 @@ static_assert(sizeof(PackedVersion) == define::versionSize);
 
 
 inline bool operator==(const PackedVersion &lhs, const PackedVersion &rhs) {
-  return (lhs.entry_version == rhs.entry_version) && (lhs.node_version == rhs.node_version);
+  uint8_t a, b;
+  __builtin_memcpy(&a, &lhs, 1);
+  __builtin_memcpy(&b, &rhs, 1);
+  return a == b;
 }
 
 inline bool operator!=(const PackedVersion &lhs, const PackedVersion &rhs) {

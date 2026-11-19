@@ -1332,19 +1332,14 @@ template <class NODE, class ENTRY, class VAL>
 void Tree::entry_write_and_unlock(NODE* node, const int idx, const Key& k, VAL v, const GlobalAddress& node_addr, uint64_t* lock_buffer,
                                   CoroPull* sink, bool async) {
   auto& entry = node->records[idx];
-  const auto & metadata = node->metadata;
   entry.update(k, v);
   auto encoded_entry_buffer = (dsm->get_rbuf(sink)).get_entry_buffer();
 #if (defined METADATA_REPLICATION && defined HOPSCOTCH_LEAF_NODE)
-  auto get_info_and_encode_versions = [=, &entry, &metadata](int idx){
-    if (NODE::IS_LEAF) {
-      auto intermediate_segment_buffer = (dsm->get_rbuf(sink)).get_segment_buffer();
-      auto [first_metadata_offset, new_len] = MetadataManager::get_offset_info(idx);
-      MetadataManager::encode_segment_metadata((char *)&entry, intermediate_segment_buffer, first_metadata_offset, 1,
-                                               LeafMetadata(metadata.h_version, 0, metadata.valid, metadata.sibling_ptr, metadata.fence_keys));
-      auto [raw_offset, raw_len, first_offset] = LeafVersionManager::get_offset_info(idx);
-      LeafVersionManager::encode_segment_versions(intermediate_segment_buffer, encoded_entry_buffer, first_offset, std::vector<int>{idx}, idx, idx, first_metadata_offset, new_len);
-      return std::make_pair(raw_offset, raw_len);
+  auto get_info_and_encode_versions = [=, &entry](int idx){
+    if constexpr (NODE::IS_LEAF) {
+      const auto info = LeafVersionManager::get_single_entry_info(idx);
+      LeafVersionManager::encode_single_entry(entry, encoded_entry_buffer, info.first_offset);
+      return std::make_pair<uint64_t, uint64_t>(info.raw_offset, info.raw_len);
     }
     else {
       auto [raw_offset, raw_len, first_offset] = VersionManager<NODE, ENTRY>::get_offset_info(idx);
@@ -1741,18 +1736,15 @@ search_finish:
 void Tree::leaf_entry_read(const GlobalAddress& leaf_addr, const int idx, char *raw_leaf_buffer, char *leaf_buffer, CoroPull* sink, bool for_write) {
   auto leaf = (LeafNode *)leaf_buffer;
 #ifdef METADATA_REPLICATION
-  auto [raw_offset, raw_len, first_offset] = LeafVersionManager::get_offset_info(idx);
-  auto raw_entry_buffer = raw_leaf_buffer + raw_offset;
+  const auto info = LeafVersionManager::get_single_entry_info(idx);
+  auto raw_entry_buffer = raw_leaf_buffer + info.raw_offset;
 re_read:
-  dsm->read_sync(raw_entry_buffer, leaf_addr + raw_offset, raw_len, sink);
-  uint8_t entry_node_version = 0;
-  auto intermediate_entry_buffer = (dsm->get_rbuf(sink)).get_segment_buffer();
-  auto [first_metadata_offset, new_len] = MetadataManager::get_offset_info(idx);
-  if (for_write) assert((LeafVersionManager::decode_segment_versions(raw_entry_buffer, intermediate_entry_buffer, first_offset, 1, first_metadata_offset, new_len, entry_node_version)));
-  else if (!LeafVersionManager::decode_segment_versions(raw_entry_buffer, intermediate_entry_buffer, first_offset, 1, first_metadata_offset, new_len, entry_node_version)) {
+  dsm->read_sync(raw_entry_buffer, leaf_addr + info.raw_offset, info.raw_len, sink);
+  if (for_write) {
+    assert((LeafVersionManager::decode_single_entry(raw_entry_buffer, info.first_offset, leaf->records[idx])));
+  } else if (!LeafVersionManager::decode_single_entry(raw_entry_buffer, info.first_offset, leaf->records[idx])) {
     goto re_read;
   }
-  MetadataManager::decode_segment_metadata(intermediate_entry_buffer, (char*)&(leaf->records[idx]), first_metadata_offset, 1, leaf->metadata);
   return;
 #else
   auto [raw_offset, raw_len, first_offset] = VersionManager<LeafNode, LeafEntry>::get_offset_info(idx);

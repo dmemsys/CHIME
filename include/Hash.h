@@ -7,21 +7,28 @@
 #include "city.h"
 
 
+inline uint64_t chime_hash_mix64(uint64_t x) noexcept {
+  x ^= x >> 30;
+  x *= 0xbf58476d1ce4e5b9ULL;
+  x ^= x >> 27;
+  x *= 0x94d049bb133111ebULL;
+  x ^= x >> 31;
+  return x;
+}
+
 inline uint64_t get_hashed_local_lock_index(const Key& k) {
-  // return CityHash64((char *)&k, sizeof(k)) % define::kLocalLockNum;
-  uint64_t res = 0, cnt = 0;
-  for (auto a : k) if (cnt ++ < 8) res = (res << 8) + a;
-  return res % define::kLocalLockNum;
+  static_assert((define::kLocalLockNum & (define::kLocalLockNum - 1)) == 0);
+  return chime_hash_mix64(key_to_u64_raw(k)) & (define::kLocalLockNum - 1);
 }
 
 
 inline uint64_t get_hashed_local_lock_index(const GlobalAddress& addr) {
-  // return CityHash64((char *)&addr, sizeof(addr)) % define::kLocalLockNum;
-  return addr.to_uint64() % define::kLocalLockNum;
+  static_assert((define::kLocalLockNum & (define::kLocalLockNum - 1)) == 0);
+  return chime_hash_mix64(addr.to_uint64()) & (define::kLocalLockNum - 1);
 }
 
 inline uint64_t get_hashed_leaf_entry_index(const Key& k) {
-  return CityHash64((char *)&k, sizeof(k)) % define::leafSpanSize;
+  return chime_hash_mix64(key_to_u64_raw(k)) % define::leafSpanSize;
 }
 
 #define HASH_TABLE_SIZE 1000000
