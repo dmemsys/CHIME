@@ -29,7 +29,7 @@ Directory::~Directory() { delete chunckAlloc; }
 
 void Directory::dirThread() {
 
-  bindCore((CPU_PHYSICAL_CORE_NUM - 1 - dirID) * 2 + 1);  // bind to the last CPU core
+  cpuAffinity().bindDirectory();
   Debug::notifyInfo("dir %d launch!\n", dirID);
 
   while (true) {

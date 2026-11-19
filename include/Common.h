@@ -16,6 +16,7 @@
 #include "Rdma.h"
 
 #include "WRLock.h"
+#include "CpuAffinity.h"
 
 // DEBUG
 // #define HOPSCOTCH_LEAF_NODE
@@ -28,7 +29,6 @@
 // Environment Config
 #define MAX_MACHINE 20
 #define MEMORY_NODE_NUM 1
-#define CPU_PHYSICAL_CORE_NUM 72  // [CONFIG]  72
 #define MAX_CORO_NUM 8
 
 #define LATENCY_WINDOWS 100000
@@ -59,7 +59,8 @@
 #define DIR_MESSAGE_NR 128
 
 
-void bindCore(uint16_t core);
+void initCpuAffinity(unsigned workers, bool has_directory, unsigned node);
+const CpuAffinity& cpuAffinity();
 char *getIP();
 char *getMac();
 

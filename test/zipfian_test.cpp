@@ -173,7 +173,7 @@ void thread_load(int id) {
 
 void thread_run(int id) {
 
-  bindCore(id * 2 + 1);
+  cpuAffinity().bindWorker(id);
 
   dsm->registerThread();
 
@@ -282,7 +282,6 @@ int main(int argc, char *argv[]) {
   config.threadNR = kThreadCount;
   dsm = DSM::getInstance(config);
   dsm->registerThread();
-  bindCore(kThreadCount * 2 + 1);
   tree = new Tree(dsm);
 
   dsm->barrier("benchmark");

@@ -22,9 +22,10 @@ This artifact provides the source code of **CHIME** and scripts to reproduce all
 
 ## Supported Platform
 We strongly recommend you to run CHIME using the r650 instances on [CloudLab](https://www.cloudlab.us/) as the code has been thoroughly tested there.
-We haven't done any test in other hardware environment.
 
 If you want to reproduce the results in the paper, 10 r650 machines are needed; otherwise, fewer machines (i.e., 3) is OK. Each r650 machine has two 36-core Intel Xeon CPUs, 256 GB of DRAM, and one 100 Gbps Mellanox ConnectX-6 RNIC. Each RNIC is connected to a 100 Gbps Ethernet switch.
+
+Thread placement (`include/CpuAffinity.h`) inspects the process's allowed online CPUs (`sched_getaffinity`) and SMT sibling topology at startup rather than assuming hardcoded 72-core odd CPU IDs, allowing CHIME to run on hosts with different CPU topologies or `taskset`/cgroup masks (after matching NIC/GID/NUMA settings in `include/Rdma.h` and `include/HugePageAlloc.h`).
 
 ## Create Cluster
 
