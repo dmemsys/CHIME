@@ -13,6 +13,9 @@ sudo apt-get -y --force-yes install memcached libmemcached-dev
 # numa
 sudo apt-get -y --force-yes install libnuma-dev
 
+# rdma-core (libibverbs + mlx5dv)
+sudo apt-get -y install rdma-core libibverbs-dev libmlx5-1 ibverbs-providers
+
 # cityhash
 git clone https://github.com/google/cityhash.git
 cd cityhash

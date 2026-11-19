@@ -129,7 +129,7 @@ private:
   void entry_write_and_unlock(NODE* node, const int idx, const Key& k, VAL v, const GlobalAddress& node_addr, uint64_t* lock_buffer, CoroPull* sink, bool async=false);
   template <class NODE, class ENTRY, int TRANS_SIZE>
   void node_write_and_unlock(NODE* node, const GlobalAddress& node_addr, uint64_t* lock_buffer, CoroPull* sink, bool async=false);
-  void segment_write_and_unlock(LeafNode* leaf, int l_idx, int r_idx, const std::vector<int>& hopped_idxes, const GlobalAddress& node_addr, uint64_t* lock_buffer, CoroPull* sink);
+  void segment_write_and_unlock(LeafNode* leaf, int l_idx, int r_idx, const int* hopped_idxes, int hopped_cnt, const GlobalAddress& node_addr, uint64_t* lock_buffer, CoroPull* sink);
 
   template <class NODE, class ENTRY, class VAL, int SPAN_SIZE, int ALLOC_SIZE, int TRANS_SIZE>
   void node_split_and_unlock(NODE* node, const Key& k, VAL v, const GlobalAddress& node_addr, uint64_t* lock_buffer, uint8_t level, CoroPull* sink);

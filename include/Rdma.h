@@ -23,7 +23,6 @@
 #define MLX_PORT 1                // [CONFIG] 1            (check from ibdev2netdev)
 #define MLX_GID 1                 // [CONFIG] 1            (check from show_gids)
 #define IBV_MTU IBV_MTU_4096      // [CONFIG] IBV_MTU_4096 (check from ifconfig)
-#define MAX_ATOMIC_ARG 32         // [CONFIG] 32
 #define ON_CHIP_SIZE 128
 
 constexpr int kQPMaxDepth = 4096;
@@ -79,8 +78,6 @@ bool createQueuePair(ibv_qp **qp, ibv_qp_type mode, ibv_cq *send_cq,
                      ibv_cq *recv_cq, RdmaContext *context,
                      uint32_t qpsMaxDepth = kQPMaxDepth, uint32_t maxInlineData = kInlineDataMax);
 
-bool createDCTarget(ibv_exp_dct **dct, ibv_cq *cq, RdmaContext *context,
-                    uint32_t qpsMaxDepth = kQPMaxDepth, uint32_t maxInlineData = kInlineDataMax);
 void fillAhAttr(ibv_ah_attr *attr, uint32_t remoteLid, uint8_t *remoteGid,
                 RdmaContext *context);
 

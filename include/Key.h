@@ -62,57 +62,33 @@ inline int longest_common_prefix(const Key &k1, const Key &k2, int depth) {
   return idx;
 }
 
+inline uint64_t key_to_u64_raw(const Key& key) {
+  static_assert(define::keyLen == sizeof(uint64_t), "Key fast path expects 8-byte keys");
+  uint64_t raw;
+  __builtin_memcpy(&raw, key.data(), sizeof(uint64_t));
+  return raw;
+}
+
+inline uint64_t key2int(const Key& key) {
+  return __builtin_bswap64(key_to_u64_raw(key));
+}
+
 inline void add_one(Key& a) {
-  for (int i = 0; i < (int)define::keyLen; ++ i) {
-    auto& partial = a.at(define::keyLen - 1 - i);
-    if ((int)partial + 1 < (1 << 8)) {
-      partial ++;
-      return;
-    }
-    else {
-      partial = 0;
-    }
-  }
+  uint64_t be = __builtin_bswap64(key2int(a) + 1ULL);
+  __builtin_memcpy(a.data(), &be, sizeof(uint64_t));
 }
 
 inline Key operator+(const Key& a, uint8_t b) {
-  Key res = a;
-  for (int i = 0; i < (int)define::keyLen; ++ i) {
-    auto& partial = res.at(define::keyLen - 1 - i);
-    if ((int)partial + b < (1 << 8)) {
-      partial += b;
-      break;
-    }
-    else {
-      auto tmp = ((int)partial + b);
-      partial = tmp % (1 << 8);
-      b = tmp / (1 << 8);
-    }
-  }
+  Key res;
+  uint64_t be = __builtin_bswap64(key2int(a) + (uint64_t)b);
+  __builtin_memcpy(res.data(), &be, sizeof(uint64_t));
   return res;
 }
 
 inline Key operator-(const Key& a, uint8_t b) {
-  Key res = a;
-  for (int i = 0; i < (int)define::keyLen; ++ i) {
-    auto& partial = res.at(define::keyLen - 1 - i);
-    if (partial >= b) {
-      partial -= b;
-      break;
-    }
-    else {
-      int carry = 0, tmp = partial;
-      while(tmp < b) tmp += (1 << 8), carry ++;
-      partial = ((int)partial + carry * (1 << 8)) - b;
-      b = carry;
-    }
-  }
-  return res;
-}
-
-inline uint64_t key2int(const Key& key) {
-  uint64_t res = 0;
-  for (auto a : key) res = (res << 8) + a;
+  Key res;
+  uint64_t be = __builtin_bswap64(key2int(a) - (uint64_t)b);
+  __builtin_memcpy(res.data(), &be, sizeof(uint64_t));
   return res;
 }
 
@@ -120,13 +96,11 @@ inline Key int2key(uint64_t key) {
 #ifdef KEY_SPACE_LIMIT
   key = key % (define::kKeyMax - define::kKeyMin) + define::kKeyMin;
 #else
-  if (key == key2int(define::kkeyNull)) key = define::kKeyMin;
+  if (key == 0ULL) key = define::kKeyMin;
 #endif
-  Key res{};
-  for (int i = 1; i <= (int)define::keyLen; ++ i) {
-    auto shr = (define::keyLen - i) * 8;
-    res.at(i - 1) = (shr >= 64u ? 0 : ((key >> shr) & ((1 << 8) - 1))); // Is equivalent to padding zero for short key
-  }
+  Key res;
+  uint64_t be = __builtin_bswap64(key);
+  __builtin_memcpy(res.data(), &be, sizeof(uint64_t));
   return res;
 }
 
@@ -138,8 +112,7 @@ inline Key str2key(const std::string &key) {
 }
 
 inline uint16_t key2fp(const Key& key) {
-  uint16_t res = key.at(define::keyLen - 1);
-  return (res << 8) + key.at(define::keyLen - 2);
+  return (static_cast<uint16_t>(key[define::keyLen - 1]) << 8) | key[define::keyLen - 2];
 }
 
 #endif // _KEY_H_

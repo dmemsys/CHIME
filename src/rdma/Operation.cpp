@@ -1,4 +1,5 @@
 #include "Rdma.h"
+#include "MaskedAtomics.h"
 
 #include<vector>
 
@@ -58,19 +59,6 @@ static inline void fillSgeWr(ibv_sge &sg, ibv_send_wr &wr, uint64_t source,
 }
 
 static inline void fillSgeWr(ibv_sge &sg, ibv_recv_wr &wr, uint64_t source,
-                             uint64_t size, uint32_t lkey) {
-  memset(&sg, 0, sizeof(sg));
-  sg.addr = (uintptr_t)source;
-  sg.length = size;
-  sg.lkey = lkey;
-
-  memset(&wr, 0, sizeof(wr));
-  wr.wr_id = 0;
-  wr.sg_list = &sg;
-  wr.num_sge = 1;
-}
-
-static inline void fillSgeWr(ibv_sge &sg, ibv_exp_send_wr &wr, uint64_t source,
                              uint64_t size, uint32_t lkey) {
   memset(&sg, 0, sizeof(sg));
   sg.addr = (uintptr_t)source;
@@ -259,33 +247,14 @@ bool rdmaFetchAndAdd(ibv_qp *qp, uint64_t source, uint64_t dest, uint64_t add,
 bool rdmaFetchAndAddBoundary(ibv_qp *qp, uint64_t source, uint64_t dest,
                              uint64_t add, uint32_t lkey, uint32_t remoteRKey,
                              uint64_t boundary, bool singal, uint64_t wr_id) {
-  struct ibv_sge sg;
-  struct ibv_exp_send_wr wr;
-  struct ibv_exp_send_wr *wrBad;
-
-  fillSgeWr(sg, wr, source, 8, lkey);
-
-  wr.exp_opcode = IBV_EXP_WR_EXT_MASKED_ATOMIC_FETCH_AND_ADD;
-  wr.exp_send_flags = IBV_EXP_SEND_EXT_ATOMIC_INLINE;
-  wr.wr_id = wr_id;
-
-  if (singal) {
-    wr.exp_send_flags |= IBV_EXP_SEND_SIGNALED;
-  }
-
-  wr.ext_op.masked_atomics.log_arg_sz = 3;
-  wr.ext_op.masked_atomics.remote_addr = dest;
-  wr.ext_op.masked_atomics.rkey = remoteRKey;
-
-  auto &op = wr.ext_op.masked_atomics.wr_data.inline_data.op.fetch_add;
-  op.add_val = add;
-  op.field_boundary = 1ull << boundary;
-
-  if (ibv_exp_post_send(qp, &wr, &wrBad)) {
-    Debug::notifyError("Send with MASK FETCH_AND_ADD failed.");
+  if (boundary >= 64) {
+    Debug::notifyError("CHIME_RAW_WQE_FAIL invalid FAA boundary: %lu", boundary);
+    errno = EINVAL;
     return false;
   }
-  return true;
+  auto wqe = chime_raw::faa(qp->qp_num, source, dest, lkey, remoteRKey, add,
+                            1ULL << boundary, singal);
+  return chime_raw::post(qp, &wqe, wr_id);
 }
 
 
@@ -322,36 +291,9 @@ bool rdmaCompareAndSwap(ibv_qp *qp, uint64_t source, uint64_t dest,
 bool rdmaCompareAndSwapMask(ibv_qp *qp, uint64_t source, uint64_t dest,
                             uint64_t compare, uint64_t swap, uint32_t lkey,
                             uint32_t remoteRKey, uint64_t compare_mask, uint64_t swap_mask, bool singal, uint64_t wrID) {
-  struct ibv_sge sg;
-  struct ibv_exp_send_wr wr;
-  struct ibv_exp_send_wr *wrBad;
-
-  fillSgeWr(sg, wr, source, 8, lkey);
-
-  wr.exp_opcode = IBV_EXP_WR_EXT_MASKED_ATOMIC_CMP_AND_SWP;
-  wr.exp_send_flags = IBV_EXP_SEND_EXT_ATOMIC_INLINE;
-
-  if (singal) {
-    wr.exp_send_flags |= IBV_EXP_SEND_SIGNALED;
-  }
-
-  wr.ext_op.masked_atomics.log_arg_sz = 3;
-  wr.ext_op.masked_atomics.remote_addr = dest;
-  wr.ext_op.masked_atomics.rkey = remoteRKey;
-  wr.wr_id = wrID;
-
-  auto &op = wr.ext_op.masked_atomics.wr_data.inline_data.op.cmp_swap;
-  op.compare_val = compare;
-  op.swap_val = swap;
-
-  op.compare_mask = compare_mask;
-  op.swap_mask = swap_mask;
-
-  if (ibv_exp_post_send(qp, &wr, &wrBad)) {
-    Debug::notifyError("Send with MASK ATOMIC_CMP_AND_SWP failed.");
-    return false;
-  }
-  return true;
+  auto wqe = chime_raw::cas(qp->qp_num, source, dest, lkey, remoteRKey,
+                            compare, swap, compare_mask, swap_mask, singal);
+  return chime_raw::post(qp, &wqe, wrID);
 }
 
 

@@ -22,48 +22,60 @@ enum HandoverType {
 };
 
 
-struct LocalLockNode {
-  // read waiting queue
-  std::atomic<uint8_t> read_current;
-  std::atomic<uint8_t> read_ticket;
-  volatile bool read_handover;
+struct LocalSpinLock {
+  std::atomic<uint8_t> flag{0};
 
-  // write waiting queue
-  std::atomic<uint8_t> write_current;
-  std::atomic<uint8_t> write_ticket;
-  volatile bool write_handover;
+  inline void lock() noexcept {
+    while (flag.exchange(1, std::memory_order_acquire) != 0) {
+      while (flag.load(std::memory_order_relaxed) != 0) {
+        __builtin_ia32_pause();
+      }
+    }
+  }
 
-  /* ----- auxiliary variables for simplicity  TODO: dynamic allocate ----- */
-  // identical time window start time
-  std::atomic<bool> window_start;
-  std::atomic<uint8_t> read_window;
-  std::atomic<uint8_t> write_window;
-  std::mutex r_lock;
-  std::mutex w_lock;
+  inline void unlock() noexcept {
+    flag.store(0, std::memory_order_release);
+  }
+};
 
-  // hash conflict
-  std::atomic<Key*> unique_read_key;
-  std::atomic<Key*> unique_write_key;
+
+struct alignas(64) LocalLockNode {
+  // Naturally 8-byte aligned hot fields (offsets 0..31)
+  std::atomic<uint64_t> unique_read_key;
+  std::atomic<uint64_t> unique_write_key;
+  std::atomic<Value> wc_buffer;
   GlobalAddress unique_addr;
 
-  // read delegation
-  bool res;
-  union {
+  // Read delegation / cas-handover payload (offset 32..48, 17 bytes)
+  union __attribute__((packed)) {
     Value ret_value;
     InternalEntry ret_p;
   };
 
-  // write combining
-  std::mutex wc_lock;
-  Value wc_buffer;
+  // Compact 1-byte control fields (offsets 49..61)
+  std::atomic<uint8_t> read_current;
+  std::atomic<uint8_t> read_ticket;
+  volatile bool read_handover;
+  std::atomic<uint8_t> write_current;
+  std::atomic<uint8_t> write_ticket;
+  volatile bool write_handover;
+  std::atomic<bool> window_start;
+  std::atomic<uint8_t> read_window;
+  std::atomic<uint8_t> write_window;
+  LocalSpinLock r_lock;
+  LocalSpinLock w_lock;
+  bool res;
+  uint8_t handover_cnt;
 
-  // lock handover
-  int handover_cnt;
-
-  LocalLockNode() : read_current(0), read_ticket(0), read_handover(0), write_current(0), write_ticket(0), write_handover(0),
-                    window_start(0), read_window(0), write_window(0),
-                    unique_read_key(0), unique_write_key(0), unique_addr(0), handover_cnt(0) {}
+  LocalLockNode() : unique_read_key(0), unique_write_key(0), wc_buffer(0), unique_addr(0),
+                    ret_value(0),
+                    read_current(0), read_ticket(0), read_handover(false),
+                    write_current(0), write_ticket(0), write_handover(false),
+                    window_start(false), read_window(0), write_window(0),
+                    r_lock(), w_lock(), res(false), handover_cnt(0) {}
 };
+
+static_assert(sizeof(LocalLockNode) == 64, "LocalLockNode must fit in a single 64B cache line");
 
 
 class LocalLockTable {
@@ -106,15 +118,23 @@ private:
 
 // read-delegation
 inline std::pair<bool, bool> LocalLockTable::acquire_local_read_lock(const Key& k, CoroQueue *waiting_queue, CoroPull* sink) {
+  const uint64_t raw_k = key_to_u64_raw(k);
+  if (__builtin_expect(raw_k == 0ULL, 0)) {
+    return std::make_pair(false, true);
+  }
   auto &node = local_locks[get_hashed_local_lock_index(k)];
 
-  Key* unique_key = nullptr;
-  Key* new_key = new Key(k);
-  bool res = node.unique_read_key.compare_exchange_strong(unique_key, new_key);
-  if (!res) {
-    delete new_key;
-    if (*unique_key != k) {  // conflict keys
+  uint64_t unique_key = node.unique_read_key.load(std::memory_order_acquire);
+  if (unique_key != raw_k) {
+    if (unique_key != 0ULL) {
       return std::make_pair(false, true);
+    }
+    if (!node.unique_read_key.compare_exchange_strong(unique_key, raw_k,
+                                                      std::memory_order_acq_rel,
+                                                      std::memory_order_acquire)) {
+      if (unique_key != raw_k) {  // conflict keys
+        return std::make_pair(false, true);
+      }
     }
   }
 
@@ -128,8 +148,8 @@ inline std::pair<bool, bool> LocalLockTable::acquire_local_read_lock(const Key& 
     }
     current = node.read_current.load(std::memory_order_relaxed);
   }
-  unique_key = node.unique_read_key.load();
-  if (!unique_key || *unique_key != k) {  // conflict keys
+  unique_key = node.unique_read_key.load(std::memory_order_acquire);
+  if (unique_key != raw_k) {  // conflict keys
     if (node.read_window) {
       -- node.read_window;
       if (!node.read_window && !node.write_window) {
@@ -178,7 +198,7 @@ inline void LocalLockTable::release_local_read_lock(const Key& k, std::pair<bool
   node.read_handover = ticket != (uint8_t)(current + 1);
 
   if (!node.read_handover) {  // next epoch
-    node.unique_read_key = nullptr;
+    node.unique_read_key.store(0ULL, std::memory_order_release);
   }
 
   node.r_lock.lock();
@@ -196,21 +216,27 @@ inline void LocalLockTable::release_local_read_lock(const Key& k, std::pair<bool
 
 // write-combining
 inline std::pair<bool, bool> LocalLockTable::acquire_local_write_lock(const Key& k, const Value& v, CoroQueue *waiting_queue, CoroPull* sink) {
+  const uint64_t raw_k = key_to_u64_raw(k);
+  if (__builtin_expect(raw_k == 0ULL, 0)) {
+    return std::make_pair(false, true);
+  }
   auto &node = local_locks[get_hashed_local_lock_index(k)];
 
-  Key* unique_key = nullptr;
-  Key* new_key = new Key(k);
-  bool res = node.unique_write_key.compare_exchange_strong(unique_key, new_key);
-  if (!res) {
-    delete new_key;
-    if (*unique_key != k) {  // conflict keys
+  uint64_t unique_key = node.unique_write_key.load(std::memory_order_acquire);
+  if (unique_key != raw_k) {
+    if (unique_key != 0ULL) {
       return std::make_pair(false, true);
+    }
+    if (!node.unique_write_key.compare_exchange_strong(unique_key, raw_k,
+                                                       std::memory_order_acq_rel,
+                                                       std::memory_order_acquire)) {
+      if (unique_key != raw_k) {  // conflict keys
+        return std::make_pair(false, true);
+      }
     }
   }
 
-  node.wc_lock.lock();
-  node.wc_buffer = v;     // local overwrite (combining)
-  node.wc_lock.unlock();
+  node.wc_buffer.store(v, std::memory_order_release);     // local overwrite (combining)
 
   uint8_t ticket = node.write_ticket.fetch_add(1);  // acquire local lock
   uint8_t current = node.write_current.load(std::memory_order_relaxed);
@@ -222,8 +248,8 @@ inline std::pair<bool, bool> LocalLockTable::acquire_local_write_lock(const Key&
     }
     current = node.write_current.load(std::memory_order_relaxed);
   }
-  unique_key = node.unique_write_key.load();
-  if (!unique_key || *unique_key != k) {  // conflict keys
+  unique_key = node.unique_write_key.load(std::memory_order_acquire);
+  if (unique_key != raw_k) {  // conflict keys
     if (node.write_window) {
       -- node.write_window;
       if (!node.read_window && !node.write_window) {
@@ -242,14 +268,15 @@ inline std::pair<bool, bool> LocalLockTable::acquire_local_write_lock(const Key&
 
 // write-combining
 inline bool LocalLockTable::get_combining_value(const Key& k, Value& v) {
+  const uint64_t raw_k = key_to_u64_raw(k);
+  if (__builtin_expect(raw_k == 0ULL, 0)) return false;
   auto &node = local_locks[get_hashed_local_lock_index(k)];
   bool res = false;
-  Key* unique_key = node.unique_write_key.load();
-  if (unique_key && *unique_key == k) {  // wc
-    node.wc_lock.lock();
-    res = node.wc_buffer != v;
-    v = node.wc_buffer;
-    node.wc_lock.unlock();
+  uint64_t unique_key = node.unique_write_key.load(std::memory_order_acquire);
+  if (unique_key == raw_k) {  // wc
+    Value cur = node.wc_buffer.load(std::memory_order_acquire);
+    res = (cur != v);
+    v = cur;
   }
   return res;
 }
@@ -277,7 +304,7 @@ inline void LocalLockTable::release_local_write_lock(const Key& k, std::pair<boo
   node.write_handover = ticket != (uint8_t)(current + 1);
 
   if (!node.write_handover) {  // next epoch
-    node.unique_write_key = nullptr;
+    node.unique_write_key.store(0ULL, std::memory_order_release);
   }
 
   node.w_lock.lock();
@@ -395,24 +422,21 @@ inline bool LocalLockTable::acquire_local_lock(const Key& k, CoroQueue *waiting_
     current = node.write_current.load(std::memory_order_relaxed);
   }
 
+  const uint64_t raw_k = key_to_u64_raw(k);
   if (!node.write_handover) {  // winner
-    auto old_key = node.unique_write_key.load(std::memory_order_relaxed);
-    node.unique_write_key = new Key(k);
-    if(old_key) delete old_key;
+    node.unique_write_key.store(raw_k, std::memory_order_relaxed);
   }
-  // if (*node.unique_write_key == k) {
-  //   node.handover_cnt ++;
-  // }
   auto unique_key = node.unique_write_key.load(std::memory_order_relaxed);
-  return node.write_handover && (unique_key && *unique_key == k);  // only if updating at the same k can this update handover
+  return node.write_handover && (raw_k != 0ULL && unique_key == raw_k);  // only if updating at the same k can this update handover
 }
 
 // cas-handover
 inline void LocalLockTable::release_local_lock(const Key& k, bool& res, InternalEntry& ret_p) {
   auto &node = local_locks[get_hashed_local_lock_index(k)];
 
+  const uint64_t raw_k = key_to_u64_raw(k);
   auto unique_key = node.unique_write_key.load(std::memory_order_relaxed);
-  if (unique_key && *unique_key == k) {
+  if (raw_k != 0ULL && unique_key == raw_k) {
     if (!node.write_handover) {  // winner
       node.res = res;
       node.ret_p = ret_p;
@@ -442,9 +466,7 @@ inline void LocalLockTable::release_local_lock(const Key& k, bool& res, Internal
 inline bool LocalLockTable::acquire_local_write_lock(const GlobalAddress& addr, const Value& v, CoroQueue *waiting_queue, CoroPull* sink) {
   auto &node = local_locks[get_hashed_local_lock_index(addr)];
 
-  node.wc_lock.lock();
-  node.wc_buffer = v;     // local overwrite (combining)
-  node.wc_lock.unlock();
+  node.wc_buffer.store(v, std::memory_order_release);     // local overwrite (combining)
 
   uint8_t ticket = node.write_ticket.fetch_add(1);
   uint8_t current = node.write_current.load(std::memory_order_relaxed);
@@ -469,9 +491,7 @@ inline void LocalLockTable::release_local_write_lock(const GlobalAddress& addr, 
 
   if (!node.write_handover) {
     // unlock lock_node.unique_key
-    node.wc_lock.lock();
-    Value wc_v = node.wc_buffer;
-    node.wc_lock.unlock();
+    Value wc_v = node.wc_buffer.load(std::memory_order_acquire);
     write_func(wc_v);
     unlock_func(node.unique_addr);
   }

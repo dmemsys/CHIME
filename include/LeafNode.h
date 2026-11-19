@@ -16,13 +16,16 @@ public:
 
 public:
   LeafMetadata() : h_version(), level(0), valid(1), sibling_ptr(), fence_keys() {}
+  LeafMetadata(PackedVersion h_version, uint8_t level, uint8_t valid, GlobalAddress sibling_ptr)
+      : h_version(h_version), level(level), valid(valid), sibling_ptr(sibling_ptr),
+        fence_keys(define::kkeyNull, define::kkeyNull) {}
   LeafMetadata(PackedVersion h_version, uint8_t level, uint8_t valid, GlobalAddress sibling_ptr, FenceKeys fence_keys) : h_version(h_version), level(level), valid(valid), sibling_ptr(sibling_ptr), fence_keys(fence_keys) {}
 } __attribute__((packed));
 
 static_assert(sizeof(LeafMetadata) == define::leafMetadataSize);
 
 inline bool operator==(const LeafMetadata &lhs, const LeafMetadata &rhs) {
-  return !strncmp((char *)&lhs, (char*)&rhs, sizeof(LeafMetadata));
+  return __builtin_memcmp(&lhs, &rhs, sizeof(LeafMetadata)) == 0;
 }
 
 

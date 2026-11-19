@@ -197,7 +197,7 @@ void thread_load(int id) {
 
 
 void thread_run(int id) {
-  bindCore(id * 2 + 1);  // bind to CPUs in NUMA that close to mlx5_2
+  cpuAffinity().bindWorker(id);
 
   dsm->registerThread();
   uint64_t my_id = kThreadCount * dsm->getMyNodeID() + id;
@@ -358,7 +358,6 @@ int main(int argc, char *argv[]) {
   config.machineNR = kNodeCount;
   config.threadNR = kThreadCount;
   dsm = DSM::getInstance(config);
-  bindCore(kThreadCount * 2 + 1);
 #ifdef ENABLE_CACHE_EVICTION
   dsm->loadKeySpace(ycsb_load_path, false);
 #else

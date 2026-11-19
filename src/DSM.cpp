@@ -46,6 +46,8 @@ DSM::DSM(const DSMConfig &conf)
   memset((char *)cache.data, 0, cache.size * define::GB);
 
   initRDMAConnection();
+  static_assert(NR_DIRECTORY == 1, "CPU placement reserves one Directory thread");
+  initCpuAffinity(conf.threadNR, myNodeID < MEMORY_NODE_NUM, myNodeID);
   if (myNodeID < MEMORY_NODE_NUM) {  // start memory server
     for (int i = 0; i < NR_DIRECTORY; ++i) {
       dirAgent[i] =
@@ -277,20 +279,44 @@ void DSM::read_batch_sync_without_sink(RdmaOpRegion *rs, int k, CoroPull* sink, 
 }
 
 void DSM::read_batches_sync(const std::vector<RdmaOpRegion>& rs, CoroPull* sink) {
-  std::map<uint64_t, std::vector<RdmaOpRegion> > each_rs;
+  const size_t n = rs.size();
+  if (n == 0) return;
 
-  for (const auto& r : rs) {
-    int node_id = GlobalAddress{r.dest}.nodeID;
-    each_rs[node_id].emplace_back(r);
+  const uint16_t first_node = GlobalAddress{rs[0].dest}.nodeID;
+  bool single_node = true;
+  for (size_t i = 1; i < n; ++i) {
+    if (GlobalAddress{rs[i].dest}.nodeID != first_node) {
+      single_node = false;
+      break;
+    }
   }
-  for (auto& p : each_rs) {
-    auto& _rs = p.second;
-    read_batch(&_rs[0], (int)_rs.size(), true, sink);
+
+  if (single_node && n <= 128) {
+    RdmaOpRegion local_rs[128];
+    memcpy(local_rs, rs.data(), n * sizeof(RdmaOpRegion));
+    read_batch_sync(local_rs, (int)n, sink);
+    return;
+  }
+
+  std::vector<RdmaOpRegion> buckets[MAX_MACHINE];
+  int num_nodes = 0;
+  for (const auto& r : rs) {
+    uint16_t node_id = GlobalAddress{r.dest}.nodeID;
+    if (buckets[node_id].empty()) {
+      buckets[node_id].reserve(n);
+      ++num_nodes;
+    }
+    buckets[node_id].push_back(r);
+  }
+  for (int node_id = 0; node_id < MAX_MACHINE; ++node_id) {
+    if (!buckets[node_id].empty()) {
+      read_batch(buckets[node_id].data(), (int)buckets[node_id].size(), true, sink);
+    }
   }
 
   if (sink == nullptr) {
     ibv_wc wc;
-    pollWithCQ(iCon->cq, (int)each_rs.size(), &wc);
+    pollWithCQ(iCon->cq, num_nodes, &wc);
   }
 }
 
@@ -353,20 +379,44 @@ void DSM::write_batch_sync_without_sink(RdmaOpRegion *rs, int k, CoroPull* sink,
 }
 
 void DSM::write_batches_sync(const std::vector<RdmaOpRegion>& rs, CoroPull* sink) {
-  std::map<uint64_t, std::vector<RdmaOpRegion> > each_rs;
+  const size_t n = rs.size();
+  if (n == 0) return;
 
-  for (const auto& r : rs) {
-    int node_id = GlobalAddress{r.dest}.nodeID;
-    each_rs[node_id].emplace_back(r);
+  const uint16_t first_node = GlobalAddress{rs[0].dest}.nodeID;
+  bool single_node = true;
+  for (size_t i = 1; i < n; ++i) {
+    if (GlobalAddress{rs[i].dest}.nodeID != first_node) {
+      single_node = false;
+      break;
+    }
   }
-  for (auto& p : each_rs) {
-    auto& rs = p.second;
-    write_batch(&rs[0], (int)rs.size(), true, sink);
+
+  if (single_node && n <= 128) {
+    RdmaOpRegion local_rs[128];
+    memcpy(local_rs, rs.data(), n * sizeof(RdmaOpRegion));
+    write_batch_sync(local_rs, (int)n, sink);
+    return;
+  }
+
+  std::vector<RdmaOpRegion> buckets[MAX_MACHINE];
+  int num_nodes = 0;
+  for (const auto& r : rs) {
+    uint16_t node_id = GlobalAddress{r.dest}.nodeID;
+    if (buckets[node_id].empty()) {
+      buckets[node_id].reserve(n);
+      ++num_nodes;
+    }
+    buckets[node_id].push_back(r);
+  }
+  for (int node_id = 0; node_id < MAX_MACHINE; ++node_id) {
+    if (!buckets[node_id].empty()) {
+      write_batch(buckets[node_id].data(), (int)buckets[node_id].size(), true, sink);
+    }
   }
 
   if (sink == nullptr) {
     ibv_wc wc;
-    pollWithCQ(iCon->cq, (int)each_rs.size(), &wc);
+    pollWithCQ(iCon->cq, num_nodes, &wc);
   }
 }
 

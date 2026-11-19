@@ -5,6 +5,8 @@ This is the implementation repository of our *SOSP'24* paper: **CHIME: A Cache-E
 This artifact provides the source code of **CHIME** and scripts to reproduce all the experiment results in our paper.
 **CHIME**, a <u>**C**</u>ache-efficient and <u>**H**</u>igh-performance Hybrid <u>**I**</u>ndex on disaggregated <u>**ME**</u>mory, combines the B+ tree with hopscotch hashing, to break the trade-off between cache consumption and read amplifications for existing DM range indexes.
 
+> **SOSP '24 Artifact Snapshot:** `main` builds against standard upstream `rdma-core` (`libibverbs` + `mlx5dv`, Ubuntu 22.04/24.04+) without requiring legacy `MLNX_OFED 4.x` experimental verbs (`ibv_exp_*`). If you need the frozen SOSP '24 Artifact Evaluation snapshot for Ubuntu 18.04 + `MLNX_OFED 4.9`, check out branch [`sosp24-backup`](https://github.com/dmemsys/CHIME/tree/sosp24-backup).
+
 
 - [CHIME](#chime-a-cache-efficient-and-high-performance-hybrid-index-on-disaggregated-memory)
   * [Supported Platform](#supported-platform)
@@ -20,9 +22,10 @@ This artifact provides the source code of **CHIME** and scripts to reproduce all
 
 ## Supported Platform
 We strongly recommend you to run CHIME using the r650 instances on [CloudLab](https://www.cloudlab.us/) as the code has been thoroughly tested there.
-We haven't done any test in other hardware environment.
 
 If you want to reproduce the results in the paper, 10 r650 machines are needed; otherwise, fewer machines (i.e., 3) is OK. Each r650 machine has two 36-core Intel Xeon CPUs, 256 GB of DRAM, and one 100 Gbps Mellanox ConnectX-6 RNIC. Each RNIC is connected to a 100 Gbps Ethernet switch.
+
+Thread placement (`include/CpuAffinity.h`) inspects the process's allowed online CPUs (`sched_getaffinity`) and SMT sibling topology at startup rather than assuming hardcoded 72-core odd CPU IDs, allowing CHIME to run on hosts with different CPU topologies or `taskset`/cgroup masks (after matching NIC/GID/NUMA settings in `include/Rdma.h` and `include/HugePageAlloc.h`).
 
 ## Create Cluster
 
@@ -57,12 +60,9 @@ Note that you should run the following steps on **all** nodes you have created.
     cd CHIME
     ```
 
-2) Install Mellanox OFED.
-    ```shell
-    # It doesn't matter to see "Failed to update Firmware"
-    # This takes about 8 minutes
-    sh ./script/installMLNX.sh
-    ```
+2) Verify RDMA user-space libraries (`rdma-core`).
+
+    `main` targets standard upstream `rdma-core` (`libibverbs-dev` and `libmlx5-1` on Ubuntu 22.04/24.04+) via `mlx5dv` direct verbs rather than legacy `MLNX_OFED 4.x` `ibv_exp_*` extensions. Step 4 (`./script/installLibs.sh`) installs these packages automatically; `./script/installMLNX.sh` is retained only for legacy Ubuntu 18.04 setups (use branch `sosp24-backup` when running on `MLNX_OFED 4.9`).
 
 3) Resize disk partition.
 

@@ -7,15 +7,25 @@
 #include <net/if.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <memory>
 
-void bindCore(uint16_t core) {
-    cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
-    CPU_SET(core, &cpuset);
-    int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
-    if (rc != 0) {
-        Debug::notifyError("can't bind core!");
-    }
+namespace {
+std::unique_ptr<CpuAffinity> affinity;
+}
+
+void initCpuAffinity(unsigned workers, bool has_directory, unsigned node) {
+    if (affinity)
+        throw std::runtime_error("CHIME_CPU_AFFINITY_FAIL layout already initialized");
+    // Capture once, before main or Directory narrows the mask inherited by workers.
+    affinity = std::make_unique<CpuAffinity>(CpuAffinity::capture(workers, has_directory));
+    affinity->log(node);
+    affinity->bindMain();
+}
+
+const CpuAffinity& cpuAffinity() {
+    if (!affinity)
+        throw std::runtime_error("CHIME_CPU_AFFINITY_FAIL layout not initialized");
+    return *affinity;
 }
 
 char *getIP() {

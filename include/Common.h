@@ -16,6 +16,7 @@
 #include "Rdma.h"
 
 #include "WRLock.h"
+#include "CpuAffinity.h"
 
 // DEBUG
 // #define HOPSCOTCH_LEAF_NODE
@@ -28,7 +29,6 @@
 // Environment Config
 #define MAX_MACHINE 20
 #define MEMORY_NODE_NUM 1
-#define CPU_PHYSICAL_CORE_NUM 72  // [CONFIG]  72
 #define MAX_CORO_NUM 8
 
 #define LATENCY_WINDOWS 100000
@@ -59,7 +59,8 @@
 #define DIR_MESSAGE_NR 128
 
 
-void bindCore(uint16_t core);
+void initCpuAffinity(unsigned workers, bool has_directory, unsigned node);
+const CpuAffinity& cpuAffinity();
 char *getIP();
 char *getMac();
 
@@ -74,7 +75,21 @@ inline int bits_in(std::uint64_t u) {
 using CoroPush = boost::coroutines2::coroutine<int>::push_type;
 using CoroPull = boost::coroutines2::coroutine<int>::pull_type;
 
-using CoroQueue = std::queue<uint16_t>;
+struct CoroQueue {
+  static constexpr uint32_t kCap = 64;
+  uint16_t buf_[kCap];
+  uint32_t head_ = 0;
+  uint32_t tail_ = 0;
+
+  inline void push(uint16_t v) noexcept {
+    buf_[tail_ & (kCap - 1)] = v;
+    ++tail_;
+  }
+  inline void pop() noexcept { ++head_; }
+  inline uint16_t front() const noexcept { return buf_[head_ & (kCap - 1)]; }
+  inline size_t size() const noexcept { return (size_t)(tail_ - head_); }
+  inline bool empty() const noexcept { return head_ == tail_; }
+};
 
 namespace define {
 // KV size

@@ -29,19 +29,23 @@ inline void MetadataManager::decode_node_metadata(char *input_buffer, char *outp
   // copy lock and leaf metadata
   const auto& first_group = scatter_leaf->record_groups[0];
 #ifdef SIBLING_BASED_VALIDATION
-  leaf->metadata = LeafMetadata(first_group.metadata.h_version, 0U, first_group.metadata.valid, first_group.metadata.sibling_ptr, FenceKeys{});
+  leaf->metadata = LeafMetadata(first_group.metadata.h_version, 0U, first_group.metadata.valid, first_group.metadata.sibling_ptr);
 #else
   leaf->metadata = LeafMetadata(first_group.metadata.h_version, 0U, first_group.metadata.valid, first_group.metadata.sibling_ptr, first_group.metadata.fence_keys);
 #endif
-  int i = 0;
-  for (const auto& group : scatter_leaf->record_groups) {
-    assert(group.metadata == first_group.metadata);
-    for (const auto& record : group.records) {
-      leaf->records[i ++] = record;
-      if (i == define::leafSpanSize) return;
+  uint32_t copied = 0;
+  for (uint32_t g = 0; g < define::entryGroupNum; ++g) {
+    assert(scatter_leaf->record_groups[g].metadata == first_group.metadata);
+    if (copied + define::neighborSize <= define::leafSpanSize) {
+      __builtin_memcpy(static_cast<void *>(&leaf->records[copied]), static_cast<const void *>(scatter_leaf->record_groups[g].records), define::groupSize);
+      copied += define::neighborSize;
+      if (copied == define::leafSpanSize) return;
+    } else {
+      const uint32_t rem = define::leafSpanSize - copied;
+      memcpy(static_cast<void *>(&leaf->records[copied]), static_cast<const void *>(scatter_leaf->record_groups[g].records), rem * sizeof(LeafEntry));
+      return;
     }
   }
-  return;
 }
 
 
@@ -49,33 +53,47 @@ inline void MetadataManager::decode_node_metadata(char *input_buffer, char *outp
 inline void MetadataManager::encode_node_metadata(char *input_buffer, char *output_buffer) {  // LeafNode => ScatterLeafNode
   auto leaf = (LeafNode *)input_buffer;
   auto scatter_leaf = (ScatteredLeafNode *)output_buffer;
-  int i = 0;
-  for (auto& group : scatter_leaf->record_groups) {
-    group.metadata = ScatteredMetadata(leaf->metadata);
-    for (auto& record : group.records) {
-      record = leaf->records[i ++];
-      if (i == define::leafSpanSize) return;
+  const ScatteredMetadata sm(leaf->metadata);
+  uint32_t copied = 0;
+  for (uint32_t g = 0; g < define::entryGroupNum; ++g) {
+    scatter_leaf->record_groups[g].metadata = sm;
+    if (copied + define::neighborSize <= define::leafSpanSize) {
+      __builtin_memcpy(static_cast<void *>(scatter_leaf->record_groups[g].records), static_cast<const void *>(&leaf->records[copied]), define::groupSize);
+      copied += define::neighborSize;
+      if (copied == define::leafSpanSize) return;
+    } else {
+      const uint32_t rem = define::leafSpanSize - copied;
+      memcpy(static_cast<void *>(scatter_leaf->record_groups[g].records), static_cast<const void *>(&leaf->records[copied]), rem * sizeof(LeafEntry));
+      return;
     }
   }
-  return;
 }
 
 
 /* Call after read the segment and decode the versions. If no metadata is contained in the segment, return false. */
 inline bool MetadataManager::decode_segment_metadata(char *input_buffer, char *output_buffer, uint64_t first_metadata_offset, int entry_num, LeafMetadata& metadata) {  // ScatterLeafNode => LeafNode
-  auto segment_len = sizeof(LeafEntry) * entry_num;
+  const uint64_t segment_len = sizeof(LeafEntry) * (uint64_t)entry_num;
   memcpy(output_buffer, input_buffer, first_metadata_offset);
   if (first_metadata_offset >= segment_len) {
     return false;
   }
   auto scattered_metadata = (ScatteredMetadata *)(input_buffer + first_metadata_offset);
-  for (uint64_t i = first_metadata_offset, j = first_metadata_offset; j < segment_len; i += define::groupSize, j += define::groupSize) {
+  uint64_t i = first_metadata_offset;
+  uint64_t j = first_metadata_offset;
+  while (j + define::groupSize <= segment_len) {
     assert(*scattered_metadata == *(ScatteredMetadata *)(input_buffer + i));
     i += sizeof(ScatteredMetadata);
-    memcpy(output_buffer + j, input_buffer + i, std::min((size_t)define::groupSize, segment_len - j));
+    __builtin_memcpy(output_buffer + j, input_buffer + i, define::groupSize);
+    i += define::groupSize;
+    j += define::groupSize;
+  }
+  if (j < segment_len) {
+    assert(*scattered_metadata == *(ScatteredMetadata *)(input_buffer + i));
+    i += sizeof(ScatteredMetadata);
+    memcpy(output_buffer + j, input_buffer + i, segment_len - j);
   }
 #ifdef SIBLING_BASED_VALIDATION
-  metadata = LeafMetadata(scattered_metadata->h_version, 0U, scattered_metadata->valid, scattered_metadata->sibling_ptr, FenceKeys{});
+  metadata = LeafMetadata(scattered_metadata->h_version, 0U, scattered_metadata->valid, scattered_metadata->sibling_ptr);
 #else
   metadata = LeafMetadata(scattered_metadata->h_version, 0U, scattered_metadata->valid, scattered_metadata->sibling_ptr, scattered_metadata->fence_keys);
 #endif
@@ -85,15 +103,23 @@ inline bool MetadataManager::decode_segment_metadata(char *input_buffer, char *o
 
 /* Call before encode the versions and write the segment. This function ecodes the scattered metadata. */
 inline void MetadataManager::encode_segment_metadata(char *input_buffer, char *output_buffer, uint64_t first_metadata_offset, int entry_num, const LeafMetadata& metadata) {  // LeafNode => ScatterLeafNode
-  auto scattered_metadata = ScatteredMetadata(metadata);
-  auto segment_len = sizeof(LeafEntry) * entry_num;
+  const ScatteredMetadata scattered_metadata(metadata);
+  const uint64_t segment_len = sizeof(LeafEntry) * (uint64_t)entry_num;
   memcpy(output_buffer, input_buffer, first_metadata_offset);
-  for (uint64_t i = first_metadata_offset, j = first_metadata_offset; i < segment_len; i += define::groupSize, j += define::groupSize) {
-    memcpy(output_buffer + j, (void*)&scattered_metadata, sizeof(ScatteredMetadata));
+  uint64_t i = first_metadata_offset;
+  uint64_t j = first_metadata_offset;
+  while (i + define::groupSize <= segment_len) {
+    __builtin_memcpy(output_buffer + j, &scattered_metadata, sizeof(ScatteredMetadata));
     j += sizeof(ScatteredMetadata);
-    memcpy(output_buffer + j, input_buffer + i, std::min((size_t)define::groupSize, segment_len - i));
+    __builtin_memcpy(output_buffer + j, input_buffer + i, define::groupSize);
+    i += define::groupSize;
+    j += define::groupSize;
   }
-  return;
+  if (i < segment_len) {
+    __builtin_memcpy(output_buffer + j, &scattered_metadata, sizeof(ScatteredMetadata));
+    j += sizeof(ScatteredMetadata);
+    memcpy(output_buffer + j, input_buffer + i, segment_len - i);
+  }
 }
 
 
