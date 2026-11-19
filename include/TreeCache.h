@@ -26,6 +26,7 @@ public:
   const TreeCacheEntry *search_from_cache(const Key &k, GlobalAddress& addr, GlobalAddress& sibling_addr, uint16_t& level);
   const TreeCacheEntry *search_ptr_from_cache(const Key &k, GlobalAddress& addr, const uint16_t& level);
   void search_range_from_cache(const Key &from, const Key &to, std::vector<InternalNode> &result);
+  void search_range_ptrs_from_cache(const Key &from, const Key &to, std::vector<const InternalNode *> &result);
   bool invalidate(const TreeCacheEntry *entry);
   void invalidate_range(const Key &lowest, const Key &highest);
   void statistics();
@@ -358,6 +359,26 @@ inline void TreeCache::search_range_from_cache(const Key &from, const Key &to, s
         return;
       }
       if (node->metadata.level == 1) result.push_back(*node);  // filter: level == 1
+    }
+    iter.Next();
+  }
+}
+
+inline void TreeCache::search_range_ptrs_from_cache(const Key &from, const Key &to, std::vector<const InternalNode *> &result) {
+  TreeCacheSkipList::Iterator iter(skiplist);
+
+  result.clear();
+  iter.SeekPoint(key2int(from));
+
+  const uint64_t to_int = key2int(to);
+  while (iter.Valid()) {
+    auto entry = (const TreeCacheEntry *)iter.key();
+    const InternalNode *node = entry->ptr;
+    if (node) {
+      if (key2int(entry->from) > to_int) {
+        return;
+      }
+      if (node->metadata.level == 1) result.push_back(node);  // filter: level == 1
     }
     iter.Next();
   }
