@@ -605,6 +605,11 @@ next_hop:
     get_entry(j).update(k, v);
     get_entry(hash_idx).set_hop_bit(j - hash_idx);
     segment_write_and_unlock(leaf, hash_idx, empty_idx % define::leafSpanSize, hopped_idxes, node_addr, lock_buffer, sink);
+#ifdef SPECULATIVE_READ
+    for (int s : hopped_idxes) {
+      idx_cache->add_to_cache(node_addr, s, records[s].key);
+    }
+#endif
     return true;
   }
   for (int offset = define::neighborSize - 1; offset > 0; -- offset) {
@@ -755,6 +760,16 @@ void Tree::hopscotch_split_and_unlock(LeafNode* leaf, const Key& k, Value v, con
   // newly insert kv
   if (k < split_key) hopscotch_insert_locally(records, k, v);
   else hopscotch_insert_locally(sibling_leaf->records, k, v);
+#ifdef SPECULATIVE_READ
+  for (int i = 0; i < (int)define::leafSpanSize; ++ i) {
+    if (sibling_leaf->records[i].key != define::kkeyNull) {
+      idx_cache->invalidate(node_addr, sibling_leaf->records[i].key);
+      idx_cache->add_to_cache(sibling_addr, i, sibling_leaf->records[i].key);
+    } else if (records[i].key != define::kkeyNull) {
+      idx_cache->add_to_cache(node_addr, i, records[i].key);
+    }
+  }
+#endif
 
   // change metadata
   auto get_max_key_idx = [=](LeafNode* leaf_node) {
@@ -1521,7 +1536,7 @@ bool Tree::leaf_node_update(const GlobalAddress& node_addr, const GlobalAddress&
   int hash_idx = get_hashed_leaf_entry_index(k);
 #ifdef SPECULATIVE_READ
   Value old_v;
-  if (speculative_read(node_addr, std::make_pair(hash_idx, (hash_idx + define::neighborSize) % define::leafSpanSize), raw_leaf_buffer, leaf_buffer, k, old_v, i, sink, true)) {
+  if (speculative_read(node_addr, std::make_pair(hash_idx, (hash_idx + define::neighborSize - 1) % define::leafSpanSize), raw_leaf_buffer, leaf_buffer, k, old_v, i, sink, true)) {
     UNUSED(old_v);
     goto update_entry;
   }
@@ -1530,7 +1545,7 @@ bool Tree::leaf_node_update(const GlobalAddress& node_addr, const GlobalAddress&
 #else
 #ifdef SPECULATIVE_READ
   Value old_v;
-  if (speculative_read(node_addr, std::make_pair(0, define::leafSpanSize), raw_leaf_buffer, leaf_buffer, k, old_v, i, sink, true)) {
+  if (speculative_read(node_addr, std::make_pair(0, (int)define::leafSpanSize - 1), raw_leaf_buffer, leaf_buffer, k, old_v, i, sink, true)) {
     UNUSED(old_v);
     goto update_entry;
   }
@@ -1784,17 +1799,35 @@ re_read:
 #ifdef SPECULATIVE_READ
 bool Tree::speculative_read(const GlobalAddress& leaf_addr, std::pair<int, int> range, char *raw_leaf_buffer, char *leaf_buffer, const Key &k, Value &v,
                             int& speculative_idx, CoroPull* sink, bool for_write) {
-  auto leaf = (LeafNode *)leaf_buffer;
   if (idx_cache->search_idx_from_cache(leaf_addr, range.first, range.second, k, speculative_idx)) {
-    // read entry
     try_speculative_read[dsm->getMyThreadID()] ++;
+#ifdef METADATA_REPLICATION
+    const auto info = LeafVersionManager::get_single_entry_info(speculative_idx);
+    auto raw_entry_buffer = raw_leaf_buffer + info.raw_offset;
+    LeafEntry local_entry;
+    LeafEntry *target_entry = leaf_buffer ? &(((LeafNode *)leaf_buffer)->records[speculative_idx]) : &local_entry;
+  re_read_spec:
+    dsm->read_sync(raw_entry_buffer, leaf_addr + info.raw_offset, info.raw_len, sink);
+    if (for_write) {
+      assert((LeafVersionManager::decode_single_entry(raw_entry_buffer, info.first_offset, *target_entry)));
+    } else if (!LeafVersionManager::decode_single_entry(raw_entry_buffer, info.first_offset, *target_entry)) {
+      goto re_read_spec;
+    }
+    const auto& entry = *target_entry;
+#else
+    auto leaf = (LeafNode *)leaf_buffer;
     leaf_entry_read(leaf_addr, speculative_idx, raw_leaf_buffer, leaf_buffer, sink, for_write);
     const auto& entry = leaf->records[speculative_idx];
+#endif
     if (entry.key == k) {
       correct_speculative_read[dsm->getMyThreadID()] ++;
       v = entry.value;
       idx_cache->add_to_cache(leaf_addr, speculative_idx, k);
       return true;
+    }
+    idx_cache->invalidate(leaf_addr, k);
+    if (entry.key != define::kkeyNull) {
+      idx_cache->add_to_cache(leaf_addr, speculative_idx, entry.key);
     }
   }
   return false;
@@ -1805,23 +1838,27 @@ bool Tree::speculative_read(const GlobalAddress& leaf_addr, std::pair<int, int> 
 bool Tree::leaf_node_search(const GlobalAddress& node_addr, const GlobalAddress& sibling_addr, const Key &k, Value &v, bool from_cache, CoroPull* sink) {
   try_read_leaf[dsm->getMyThreadID()] ++;
   auto raw_leaf_buffer = (dsm->get_rbuf(sink)).get_leaf_buffer();
-  auto leaf_buffer = (dsm->get_rbuf(sink)).get_leaf_buffer();
-  auto leaf = (LeafNode *)leaf_buffer;
+  char *leaf_buffer = nullptr;
+  LeafNode *leaf = nullptr;
 #ifdef HOPSCOTCH_LEAF_NODE
   int hash_idx = get_hashed_leaf_entry_index(k);
 #ifdef SPECULATIVE_READ
   int speculative_idx;
-  if (speculative_read(node_addr, std::make_pair(hash_idx, (hash_idx + define::neighborSize) % define::leafSpanSize), raw_leaf_buffer, leaf_buffer, k, v, speculative_idx, sink)) {
+  if (speculative_read(node_addr, std::make_pair(hash_idx, (hash_idx + define::neighborSize - 1) % define::leafSpanSize), raw_leaf_buffer, nullptr, k, v, speculative_idx, sink)) {
     UNUSED(speculative_idx);
     return true;
   }
 #endif
+  leaf_buffer = (dsm->get_rbuf(sink)).get_leaf_buffer();
+  leaf = (LeafNode *)leaf_buffer;
 re_read:
   hopscotch_search(node_addr, hash_idx, raw_leaf_buffer, leaf_buffer, sink);
 #else
+  leaf_buffer = (dsm->get_rbuf(sink)).get_leaf_buffer();
+  leaf = (LeafNode *)leaf_buffer;
 #ifdef SPECULATIVE_READ
   int speculative_idx;
-  if (speculative_read(node_addr, std::make_pair(0, define::leafSpanSize), raw_leaf_buffer, leaf_buffer, k, v, speculative_idx, sink)) {
+  if (speculative_read(node_addr, std::make_pair(0, (int)define::leafSpanSize - 1), raw_leaf_buffer, leaf_buffer, k, v, speculative_idx, sink)) {
     UNUSED(speculative_idx);
     return true;
   }
@@ -1924,7 +1961,11 @@ bool Tree::range_query(const Key &from, const Key &to, std::map<Key, Value> &ret
   using InfoMap = std::map<uint64_t, std::vector<std::tuple<int, int, GlobalAddress, uint64_t, uint64_t, uint64_t> > >;
   thread_local InfoMap leaf_info;  // [leaf_id, (hash_idx, seg_size, leaf_addr, raw_offset, raw_len, first_offset) * N]
 #ifdef SPECULATIVE_READ
-  thread_local std::vector<Key> speculative_keys;
+  struct SpecRangeKey {
+    GlobalAddress leaf_addr;
+    Key k;
+  };
+  thread_local std::vector<SpecRangeKey> speculative_keys;
   speculative_keys.clear();
 #endif
 #else
@@ -2019,9 +2060,9 @@ bool Tree::range_query(const Key &from, const Key &to, std::map<Key, Value> &ret
 #ifdef SPECULATIVE_READ
       try_read_leaf[dsm->getMyThreadID()] ++;
       int speculative_idx;
-      if (idx_cache->search_idx_from_cache(leaf_addr, hash_idx, (hash_idx + define::neighborSize) % define::leafSpanSize, k, speculative_idx)) {
+      if (idx_cache->search_idx_from_cache(leaf_addr, hash_idx, (hash_idx + define::neighborSize - 1) % define::leafSpanSize, k, speculative_idx)) {
           try_speculative_read[dsm->getMyThreadID()] ++;
-          speculative_keys.emplace_back(k);
+          speculative_keys.push_back(SpecRangeKey{leaf_addr, k});
           segments.emplace_back(std::make_pair(speculative_idx, speculative_idx + 1));
           continue;
       }
@@ -2213,9 +2254,11 @@ re_read:
 #endif
 #if (defined FINE_GRAINED_RANGE_QUERY && defined SPECULATIVE_READ)
   std::map<GlobalAddress, std::vector<Key> > retry_leaf_keys;
-  for (const auto& k : speculative_keys) {
+  for (const auto& sk : speculative_keys) {
+    const Key& k = sk.k;
     if (ret.find(k) != ret.end()) correct_speculative_read[dsm->getMyThreadID()] ++;
     else {
+      idx_cache->invalidate(sk.leaf_addr, k);
       GlobalAddress p;
       GlobalAddress sibling_p;
       uint16_t level;
