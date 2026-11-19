@@ -391,17 +391,28 @@ re_read:
   });
 #endif
   cache_node(node);  // make sure the cached internal nodes are kv-sorted
-  if (k < records[0].key) {
+  const uint64_t k_int = key2int(k);
+  const uint64_t k0 = key2int(records[0].key);
+  if (__builtin_expect(k0 == 0ULL, 0) || k_int < k0) {
     node_addr = node->metadata.leftmost_ptr;
-    sibling_addr = node->records[0].ptr;
+    sibling_addr = (__builtin_expect(k0 == 0ULL, 0) ? node->metadata.sibling_leftmost_ptr : node->records[0].ptr);
     return true;
   }
-  for (int i = 1; i < (int)define::internalSpanSize; ++ i) {
-    if (k < records[i].key || records[i].key == define::kkeyNull) {
-      node_addr = records[i - 1].ptr;
-      sibling_addr = (records[i].key == define::kkeyNull ? node->metadata.sibling_leftmost_ptr : records[i].ptr);
-      return true;
+  int lo = 1;
+  int hi = (int)define::internalSpanSize;
+  while (lo < hi) {
+    int mid = (lo + hi) >> 1;
+    uint64_t mk = key2int(records[mid].key);
+    if (mk == 0ULL || k_int < mk) {
+      hi = mid;
+    } else {
+      lo = mid + 1;
     }
+  }
+  if (lo < (int)define::internalSpanSize) {
+    node_addr = records[lo - 1].ptr;
+    sibling_addr = (key2int(records[lo].key) == 0ULL ? node->metadata.sibling_leftmost_ptr : records[lo].ptr);
+    return true;
   }
   node_addr = records[define::internalSpanSize - 1].ptr;
   sibling_addr = node->metadata.sibling_leftmost_ptr;
@@ -871,6 +882,7 @@ void Tree::hopscotch_split_and_unlock(LeafNode* leaf, const Key& k, Value v, con
     if (dsm->cas_sync(root_ptr_ptr, RootEntry(1, node_addr), RootEntry(2, root_addr), cas_buffer, sink)) {  // cas root success
       printf("[INFO] new root level %d\n", 2);
       rough_height.store(2);
+      cache_node(root_node);
       return;
     }
     else {
@@ -1179,6 +1191,7 @@ re_read:
     records[insert_idx].update(k, v);
     // write the whole node
     node_write_and_unlock<InternalNode, InternalEntry, define::transInternalSize>(node, node_addr, lock_buffer, sink, true);
+    cache_node(node);
 #endif
   }
   else {
@@ -1246,6 +1259,7 @@ void Tree::node_split_and_unlock(NODE* node, const Key& k, VAL v, const GlobalAd
 #endif
   }
   // change metadata
+  const FenceKeys old_fence_keys = node->metadata.fence_keys;
   sibling_node->metadata.level = level;
   sibling_node->metadata.fence_keys = FenceKeys{split_key, node->metadata.fence_keys.highest};
   node->metadata.fence_keys.highest = split_key;
@@ -1286,6 +1300,13 @@ void Tree::node_split_and_unlock(NODE* node, const Key& k, VAL v, const GlobalAd
   // no need to signal
   dsm->write_batch(&rs[0], 2, false, sink);
 #endif
+  if (!NODE::IS_LEAF) {
+#ifdef TREE_ENABLE_CACHE
+    tree_cache->invalidate_range(old_fence_keys.lowest, old_fence_keys.highest);
+    cache_node((InternalNode *)node);
+    cache_node((InternalNode *)sibling_node);
+#endif
+  }
   // update parent node
   if (is_root) {  // node is root node
     auto root_addr = dsm->alloc(define::allocationInternalSize, PACKED_ADDR_ALIGN_BIT);
@@ -1304,6 +1325,7 @@ void Tree::node_split_and_unlock(NODE* node, const Key& k, VAL v, const GlobalAd
     if (dsm->cas_sync(root_ptr_ptr, RootEntry(level + 1, node_addr), RootEntry(level + 2, root_addr), cas_buffer, sink)) {  // cas root success
       printf("[INFO] new root level %d\n", (int)(level + 2));
       rough_height.store((uint16_t)(level + 2));
+      cache_node(root_node);
       return;
     }
     else {

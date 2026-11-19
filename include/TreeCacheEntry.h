@@ -28,30 +28,63 @@ struct TreeCacheEntryComparator {
 
   static DecodedType decode_key(const char *b) { return Decode(b); }
 
-  int cmp(const DecodedType a_v, const DecodedType b_v) const {  // entry larger => (to larger, from smaller)
-    if (a_v.to < b_v.to) {
-      return -1;
+  int cmp(const DecodedType& a_v, const DecodedType& b_v) const {  // entry larger => (to larger, from smaller)
+    const uint64_t a_to = key2int(a_v.to);
+    const uint64_t b_to = key2int(b_v.to);
+    if (a_to != b_to) {
+      return a_to < b_to ? -1 : +1;
     }
-
-    if (a_v.to > b_v.to) {
-      return +1;
+    const uint64_t a_from = key2int(a_v.from);
+    const uint64_t b_from = key2int(b_v.from);
+    if (a_from != b_from) {
+      return a_from < b_from ? +1 : -1;
     }
-
-    if (a_v.from < b_v.from) {
-      return +1;
-    } else if (a_v.from > b_v.from) {
-      return -1;
-    } else {
-      return 0;
-    }
+    return 0;
   }
 
   int operator()(const char *a, const char *b) const {
-    return cmp(Decode(a), Decode(b));
+    uint64_t a_to, b_to;
+    __builtin_memcpy(&a_to, a + sizeof(Key), sizeof(uint64_t));
+    __builtin_memcpy(&b_to, b + sizeof(Key), sizeof(uint64_t));
+    a_to = __builtin_bswap64(a_to);
+    b_to = __builtin_bswap64(b_to);
+    if (a_to != b_to) {
+      return a_to < b_to ? -1 : +1;
+    }
+    uint64_t a_from, b_from;
+    __builtin_memcpy(&a_from, a, sizeof(uint64_t));
+    __builtin_memcpy(&b_from, b, sizeof(uint64_t));
+    a_from = __builtin_bswap64(a_from);
+    b_from = __builtin_bswap64(b_from);
+    return a_from != b_from ? (a_from < b_from ? +1 : -1) : 0;
   }
 
-  int operator()(const char *a, const DecodedType b) const {
-    return cmp(Decode(a), b);
+  int operator()(const char *a, const DecodedType& b) const {
+    uint64_t a_to;
+    __builtin_memcpy(&a_to, a + sizeof(Key), sizeof(uint64_t));
+    a_to = __builtin_bswap64(a_to);
+    const uint64_t b_to = key2int(b.to);
+    if (a_to != b_to) {
+      return a_to < b_to ? -1 : +1;
+    }
+    uint64_t a_from;
+    __builtin_memcpy(&a_from, a, sizeof(uint64_t));
+    a_from = __builtin_bswap64(a_from);
+    const uint64_t b_from = key2int(b.from);
+    return a_from != b_from ? (a_from < b_from ? +1 : -1) : 0;
+  }
+
+  int cmp_point(const char *a, uint64_t k_int) const {
+    uint64_t a_to;
+    __builtin_memcpy(&a_to, a + sizeof(Key), sizeof(uint64_t));
+    a_to = __builtin_bswap64(a_to);
+    if (a_to != k_int) {
+      return a_to < k_int ? -1 : +1;
+    }
+    uint64_t a_from;
+    __builtin_memcpy(&a_from, a, sizeof(uint64_t));
+    a_from = __builtin_bswap64(a_from);
+    return a_from != k_int ? (a_from < k_int ? +1 : -1) : 0;
   }
 };
 
